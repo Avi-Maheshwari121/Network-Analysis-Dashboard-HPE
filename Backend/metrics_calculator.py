@@ -30,6 +30,28 @@ STATIC_PAYLOAD_RATES = {
 }
 
 
+def get_protocol_category(protocol_name):
+    if not protocol_name or protocol_name == "N/A":
+        return "OTHERS"
+    
+    protocol = protocol_name.upper().strip()  # Convert to uppercase for comparison
+    
+    if protocol == "TCP":
+        return "TCP"
+    elif protocol == "UDP":
+        return "UDP"
+    elif protocol == "RTP" or protocol == "SRTP":
+        return "RTP"
+    elif protocol == "QUIC":
+        return "QUIC"
+    elif protocol == "DNS":
+        return "DNS"
+    elif "TLSV" in protocol:  # matches TLSV1.2, TLSV1.3, etc.
+        return "TLSV"
+    else:
+        return "Others"
+    
+
 def detect_dynamic_clock_rate_inline(stream_packets):
     """Detect clock rate using consecutive packet time/timestamp differences"""
     if len(stream_packets) < 2:
@@ -78,7 +100,10 @@ def calculate_metrics():
             "jitter": 0.0,
             "packet_loss_count": 0,
             "packet_loss_percent": 0.0,
-            "last_update": datetime.now().isoformat()
+            "last_update": datetime.now().isoformat(),
+            "protocol_distribution": {},
+            "streamCount": 0,
+            "totalPackets": 0
         })
 
         return shared_state.metrics_state
@@ -104,18 +129,30 @@ def calculate_metrics():
     total_weighted_jitter = 0.0
     total_jitter_weight = 0
 
+    # Packet Statistics
+    streams_count = len(shared_state.streams)
+    total_packets = len(shared_state.all_packets_history)
+    protocol_counts = {}
+
     # Iterate over all streams
     for (proto, stream_id), packet_list in shared_state.streams.items():
         if proto == "tcp":
-
+            
+            # Latency
             stream_rtt_sum = 0
             stream_rtt_count = 0
 
+            # Packet Loss Percentage count
             expected_tcp_packets += len(packet_list)
 
             for pkt in packet_list:
                 try:
                     
+                    # Protocol Distribution
+                    protocol_name = pkt[5] if pkt[5] else "N/A"
+                    protocol_category = get_protocol_category(protocol_name)
+                    protocol_counts[protocol_category] = protocol_counts.get(protocol_category, 0) + 1
+
                     # Packet Loss
                     retrans = str(pkt[10].strip()) if pkt[10] else "0"
                     fast_retrans = str(pkt[11].strip()) if pkt[11] else "0" 
@@ -216,6 +253,13 @@ def calculate_metrics():
                         start_time = min(start_time, time_rel)
                         end_time = max(end_time, time_rel)
 
+
+                    # Protocol Distribution
+                    protocol_name = pkt[5] if pkt[5] else "N/A"
+                    protocol_category = get_protocol_category(protocol_name)
+                    protocol_counts[protocol_category] = protocol_counts.get(protocol_category, 0) + 1
+
+
                     # Jitter
                     rtp_ts_str = pkt[18] if pkt[18] else 0
                     arrival_time = time_rel
@@ -303,6 +347,12 @@ def calculate_metrics():
                     if time_rel > 0:
                         start_time = min(start_time, time_rel)
                         end_time = max(end_time, time_rel) 
+
+                    # Protocol Distribution
+                    protocol_name = pkt[5] if pkt[5] else "N/A"
+                    protocol_category = get_protocol_category(protocol_name)
+                    protocol_counts[protocol_category] = protocol_counts.get(protocol_category, 0) + 1
+
                 except (ValueError, IndexError):
                     continue
 
@@ -340,7 +390,10 @@ def calculate_metrics():
         "jitter": weighted_average_jitter,
         "packet_loss_count": shared_state.lost_packets_total,
         "packet_loss_percent": packet_loss_percent,
-        "last_update": datetime.now().isoformat()
+        "last_update": datetime.now().isoformat(),
+        "protocol_distribution": protocol_counts,
+        "streamCount": streams_count,
+        "totalPackets": total_packets
     })
 
     timing_end = time.perf_counter()  # ← Different name for timing, for checking purpose

@@ -23,7 +23,10 @@ metrics_state = {
     "packet_loss_count": 0,
     "packet_loss_percent": 0.0,
     "status": "stopped",
-    "last_update": None
+    "last_update": None,
+    "protocol_distribution": {},
+    "streamCount": 0,
+    "totalPackets": 0
 }
 
 # Packet loss 

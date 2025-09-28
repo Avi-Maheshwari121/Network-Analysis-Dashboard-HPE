@@ -159,7 +159,10 @@ def stop_tshark():
                 "packet_loss_count": 0,
                 "packet_loss_percent": 0.0,
                 "status": "stopped",
-                "last_update": None
+                "last_update": None,
+                "protocol_distribution": {},
+                "streamCount": 0,
+                "totalPackets": 0
             })
             
             print("Tshark stopped")
@@ -286,25 +289,6 @@ def clear_all_packets():
     shared_state.streams = {}
     shared_state.all_packets_history = []
     print("All packets cleared")
-
-
-def get_packet_statistics():
-    """Get packet statistics"""
-    total_packets = len(shared_state.all_packets_history)
-    stream_count = len(shared_state.streams)
-    
-    # Count packets by protocol from formatted packets
-    # Will be useful in protocol wise graph
-    protocol_counts = {}
-    for packet in shared_state.all_packets_history:
-        proto = packet.get("protocol", "Unknown")
-        protocol_counts[proto] = protocol_counts.get(proto, 0) + 1
-    
-    return {
-        "total_packets": total_packets,
-        "stream_count": stream_count,
-        "protocol_distribution": protocol_counts
-    }
 
 
 def get_formatted_packets(display_count):

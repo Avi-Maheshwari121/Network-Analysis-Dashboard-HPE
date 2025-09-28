@@ -20,16 +20,14 @@ async def data_collection_loop():
 
         capture_manager.capture_packets(1.5)
         metrics_calculator.calculate_metrics()
-        stats = capture_manager.get_packet_statistics()
         
         disconnected_clients = set()
-
+    
         for client in list(shared_state.connected_clients.keys()):
             data_to_send = {
                 "type": "update",
                 "metrics": metrics_calculator.get_metrics_state(),
-                "new_packets": shared_state.all_packets_history,  
-                "stream_count": stats["stream_count"],
+                "new_packets": shared_state.all_packets_history  
             }
             
             try:
