@@ -1,3 +1,5 @@
+// avi-maheshwari121/network-analysis-dashboard-hpe/Network-Analysis-Dashboard-HPE-d12cfd16410c6685dd2d171d8840126ca82c0967/Frontend/src/hooks/useWebsocket.js
+
 import { useState, useRef, useEffect } from "react";
 
 const MAX_PACKETS_TO_STORE = 10000;
@@ -12,7 +14,8 @@ export default function useWebSocket(url) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [interfaces, setInterfaces] = useState([]);
-  const [metricsHistory, setMetricsHistory] = useState([]); // State for chart data
+  const [metricsHistory, setMetricsHistory] = useState([]);
+  const [protocolDistribution, setProtocolDistribution] = useState({});
   const ws = useRef(null);
   const isStopping = useRef(false);
 
@@ -35,7 +38,8 @@ export default function useWebSocket(url) {
             setMetrics(msg.metrics);
             setPackets(msg.packets || []);
             setInterfaces(msg.interfaces || []);
-            setMetricsHistory([]); // Clear history on new connection
+            setMetricsHistory([]);
+            setProtocolDistribution(msg.metrics.protocol_distribution || {});
             break;
           case "interfaces_response":
             setInterfaces(msg.interfaces || []);
@@ -44,8 +48,8 @@ export default function useWebSocket(url) {
           case "metrics_update":
             setMetrics(msg.metrics);
             setStreamCount(msg.stream_count || 0);
+            setProtocolDistribution(msg.metrics.protocol_distribution || {});
 
-            // Add new data point to history for charts
             setMetricsHistory(prevHistory => {
               const newEntry = {
                 time: new Date().toLocaleTimeString(),
@@ -70,7 +74,8 @@ export default function useWebSocket(url) {
               setMetrics(null);
               setPackets([]);
               setStreamCount(0);
-              setMetricsHistory([]); // Clear history on new capture
+              setMetricsHistory([]);
+              setProtocolDistribution({});
             }
             break;
           default:
@@ -100,6 +105,6 @@ export default function useWebSocket(url) {
   };
 
   return {
-    wsConnected, metrics, packets, streamCount, commandStatus, loading, error, sendCommand, interfaces, metricsHistory,
+    wsConnected, metrics, packets, streamCount, commandStatus, loading, error, sendCommand, interfaces, metricsHistory, protocolDistribution,
   };
 }

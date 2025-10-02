@@ -1,3 +1,5 @@
+// avi-maheshwari121/network-analysis-dashboard-hpe/Network-Analysis-Dashboard-HPE-d12cfd16410c6685dd2d171d8840126ca82c0967/Frontend/src/App.jsx
+
 import { useState } from "react";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
@@ -19,7 +21,8 @@ function App() {
     error,
     sendCommand,
     interfaces,
-    metricsHistory, // Get metrics history from the hook
+    metricsHistory,
+    protocolDistribution,
   } = useWebSocket(WEBSOCKET_URL);
 
   return (
@@ -36,7 +39,8 @@ function App() {
             error={error}
             sendCommand={sendCommand}
             interfaces={interfaces}
-            metricsHistory={metricsHistory} // Pass history to Dashboard
+            metricsHistory={metricsHistory}
+            protocolDistribution={protocolDistribution}
           />
         ) : (
           <RawData
