@@ -14,6 +14,17 @@ tshark_proc = None
 # WebSocket connections
 connected_clients = {}
 
+# Protocol Distribution
+protocol_distribution = {
+    "TCP": 0,
+    "UDP": 0,
+    "RTP": 0,
+    "TLSV": 0,
+    "QUIC": 0,
+    "DNS": 0,
+    "Others": 0
+}
+
 # Metrics state
 metrics_state = {
     "inbound_throughput": 0.0,
@@ -24,7 +35,7 @@ metrics_state = {
     "packet_loss_percent": 0.0,
     "status": "stopped",
     "last_update": None,
-    "protocol_distribution": {},
+    "protocol_distribution": protocol_distribution,
     "streamCount": 0,
     "totalPackets": 0
 }

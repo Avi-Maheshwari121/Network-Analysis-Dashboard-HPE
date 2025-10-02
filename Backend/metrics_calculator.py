@@ -101,7 +101,7 @@ def calculate_metrics():
             "packet_loss_count": 0,
             "packet_loss_percent": 0.0,
             "last_update": datetime.now().isoformat(),
-            "protocol_distribution": {},
+            "protocol_distribution": shared_state.protocol_distribution,
             "streamCount": 0,
             "totalPackets": 0
         })
@@ -132,7 +132,6 @@ def calculate_metrics():
     # Packet Statistics
     streams_count = len(shared_state.streams)
     total_packets = len(shared_state.all_packets_history)
-    protocol_counts = {}
 
     # Iterate over all streams
     for (proto, stream_id), packet_list in shared_state.streams.items():
@@ -151,7 +150,7 @@ def calculate_metrics():
                     # Protocol Distribution
                     protocol_name = pkt[5] if pkt[5] else "N/A"
                     protocol_category = get_protocol_category(protocol_name)
-                    protocol_counts[protocol_category] = protocol_counts.get(protocol_category, 0) + 1
+                    shared_state.protocol_distribution[protocol_category] = shared_state.protocol_distribution.get(protocol_category, 0) + 1
 
                     # Packet Loss
                     retrans = str(pkt[10].strip()) if pkt[10] else "0"
@@ -257,7 +256,7 @@ def calculate_metrics():
                     # Protocol Distribution
                     protocol_name = pkt[5] if pkt[5] else "N/A"
                     protocol_category = get_protocol_category(protocol_name)
-                    protocol_counts[protocol_category] = protocol_counts.get(protocol_category, 0) + 1
+                    shared_state.protocol_distribution[protocol_category] = shared_state.protocol_distribution.get(protocol_category, 0) + 1
 
 
                     # Jitter
@@ -351,7 +350,7 @@ def calculate_metrics():
                     # Protocol Distribution
                     protocol_name = pkt[5] if pkt[5] else "N/A"
                     protocol_category = get_protocol_category(protocol_name)
-                    protocol_counts[protocol_category] = protocol_counts.get(protocol_category, 0) + 1
+                    shared_state.protocol_distribution[protocol_category] = shared_state.protocol_distribution.get(protocol_category, 0) + 1
 
                 except (ValueError, IndexError):
                     continue
@@ -391,7 +390,7 @@ def calculate_metrics():
         "packet_loss_count": shared_state.lost_packets_total,
         "packet_loss_percent": packet_loss_percent,
         "last_update": datetime.now().isoformat(),
-        "protocol_distribution": protocol_counts,
+        "protocol_distribution": shared_state.protocol_distribution,
         "streamCount": streams_count,
         "totalPackets": total_packets
     })
