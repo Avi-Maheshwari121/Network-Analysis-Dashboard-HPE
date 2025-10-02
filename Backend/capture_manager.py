@@ -149,7 +149,6 @@ def stop_tshark():
             shared_state.all_packets_history = []
             shared_state.lost_packets_total = 0
             shared_state.expected_packets_total = 0
-            shared_state.ip_address = []
             
             shared_state.metrics_state.update({
                 "inbound_throughput": 0.0,
