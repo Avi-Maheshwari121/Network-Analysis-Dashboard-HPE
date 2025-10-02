@@ -149,6 +149,15 @@ def stop_tshark():
             shared_state.all_packets_history = []
             shared_state.lost_packets_total = 0
             shared_state.expected_packets_total = 0
+            shared_state.protocol_distribution = {
+                "TCP": 0,
+                "UDP": 0,
+                "RTP": 0,
+                "TLSV": 0,
+                "QUIC": 0,
+                "DNS": 0,
+                "Others": 0
+            }
             
             shared_state.metrics_state.update({
                 "inbound_throughput": 0.0,
@@ -159,7 +168,7 @@ def stop_tshark():
                 "packet_loss_percent": 0.0,
                 "status": "stopped",
                 "last_update": None,
-                "protocol_distribution": {},
+                "protocol_distribution": shared_state.protocol_distribution,
                 "streamCount": 0,
                 "totalPackets": 0
             })
