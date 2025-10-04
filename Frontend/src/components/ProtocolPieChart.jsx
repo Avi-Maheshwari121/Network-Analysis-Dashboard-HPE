@@ -3,7 +3,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
-const COLORS = ['#2DD4BF', '#3B82F6', '#F472B6', '#FBBF24', '#8B5CF6', '#d1d5db'];
+const COLORS = ['#2DD4BF', '#3B82F6', '#F472B6', '#FBBF24', '#8B5CF6', '#d1d5db', '#22C55E'];
 
 export default function ProtocolPieChart({ data }) {
     if (!data || Object.keys(data).length === 0) {
@@ -24,7 +24,7 @@ export default function ProtocolPieChart({ data }) {
     <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72">
       <h3 className="text-md font-semibold text-text-main mb-4">Protocol Distribution</h3>
       <ResponsiveContainer width="100%" height="85%">
-        <PieChart>
+        <PieChart margin={{ top: 20 }}>
           <Pie
             data={chartData}
             cx="50%"
@@ -43,8 +43,9 @@ export default function ProtocolPieChart({ data }) {
             contentStyle={{
               backgroundColor: '#0D1117',
               borderColor: '#30363D',
-              color: '#E6EDF3'
             }}
+            itemStyle={{ color: '#E6EDF3' }}
+            labelStyle={{ color: '#8B949E' }}
           />
           <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '20px' }} />
         </PieChart>
