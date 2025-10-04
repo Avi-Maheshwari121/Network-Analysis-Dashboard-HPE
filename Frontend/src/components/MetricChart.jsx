@@ -1,16 +1,18 @@
 import React from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Label } from 'recharts';
 
 // A generic chart component that can be reused for different metrics
 export default function MetricChart({ data, lines, unit, title }) {
   return (
-    <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72">
+    <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72 flex flex-col">
       <h3 className="text-md font-semibold text-text-main mb-4">{title}</h3>
-      <ResponsiveContainer width="100%" height="85%">
-        <LineChart data={data} margin={{ top: 5, right: 20, left: -10, bottom: 20 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#30363D" />
           <XAxis dataKey="time" stroke="#8B949E" fontSize={12} tick={{ fill: '#8B949E' }} />
-          <YAxis stroke="#8B949E" fontSize={12} tick={{ fill: '#8B949E' }} unit={unit} domain={['dataMin', 'dataMax + 2']} />
+          <YAxis stroke="#8B949E" fontSize={12} tick={{ fill: '#8B949E' }} domain={['dataMin', 'dataMax + 2']}>
+            <Label value={unit} angle={-90} position="insideLeft" style={{ textAnchor: 'middle', fill: '#8B949E' }} />
+          </YAxis>
           <Tooltip
             contentStyle={{
               backgroundColor: '#0D1117',

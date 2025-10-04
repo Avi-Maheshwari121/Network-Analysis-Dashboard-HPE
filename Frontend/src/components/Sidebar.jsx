@@ -13,7 +13,7 @@ export default function Sidebar({ activeView, setActiveView }) {
   );
 
   return (
-    <aside className="w-60 h-screen bg-surface-dark p-6 flex flex-col border-r border-border-dark">
+    <aside className="w-60 h-screen bg-surface-dark p-6 flex flex-col border-r border-border-dark sticky top-0">
       <h1 className="text-3xl font-bold text-primary-accent mb-12">NetPulse</h1>
       <nav className="flex flex-col gap-4">
         <NavButton view="dashboard">Dashboard</NavButton>

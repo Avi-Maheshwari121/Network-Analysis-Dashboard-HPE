@@ -47,6 +47,7 @@ function App() {
             wsConnected={wsConnected}
             packets={packets}
             error={error}
+            metrics={metrics}
           />
         )}
       </main>
