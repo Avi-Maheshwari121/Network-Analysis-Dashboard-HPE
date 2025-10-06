@@ -1,0 +1,10 @@
+# Network Monitoring Dashboard - Backend Requirements
+
+# System and Network Utilities
+psutil==7.1.0
+
+# WebSocket Support
+websockets==15.0.1
+
+# Note: TShark/Wireshark must be installed separately on your system
+# Download from: https://www.wireshark.org/download.html
