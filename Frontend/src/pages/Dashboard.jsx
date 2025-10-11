@@ -1,15 +1,16 @@
-// avi-maheshwari121/network-analysis-dashboard-hpe/Network-Analysis-Dashboard-HPE-d12cfd16410c6685dd2d171d8840126ca82c0967/Frontend/src/pages/Dashboard.jsx
+// Dashboard.jsx
 
+import { useState } from 'react';
 import StatusBanner from "../components/StatusBanner";
 import MetricCards from "../components/MetricCards";
 import ControlPanel from "../components/ControlPanel";
 import MetricChart from "../components/MetricChart";
 import ProtocolPieChart from "../components/ProtocolPieChart";
+import SummaryModal from '../components/SummaryModal'; // Import the new modal
 
 export default function Dashboard({
   wsConnected,
   metrics,
-  streamCount,
   commandStatus,
   loading,
   error,
@@ -17,7 +18,15 @@ export default function Dashboard({
   interfaces,
   metricsHistory,
   protocolDistribution,
+  // --- NEW: Receive summary props ---
+  captureSummary,
+  summaryStatus,
+  // --- End of NEW section ---
 }) {
+  // --- NEW: State to control modal visibility ---
+  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
+  // --- End of NEW section ---
+
   return (
     <div>
       <StatusBanner connected={wsConnected} error={error} metrics={metrics} />
@@ -26,8 +35,12 @@ export default function Dashboard({
         loading={loading}
         commandStatus={commandStatus}
         interfaces={interfaces}
+        // --- NEW: Pass summary props and handler to ControlPanel ---
+        summaryStatus={summaryStatus}
+        onShowSummary={() => setIsSummaryModalOpen(true)}
+        // --- End of NEW section ---
       />
-      <MetricCards metrics={metrics} streamCount={streamCount} />
+      <MetricCards metrics={metrics} />
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-2">
@@ -54,6 +67,14 @@ export default function Dashboard({
             />
         </div>
       </div>
+      
+      {/* --- NEW: Render the modal and control it with state --- */}
+      <SummaryModal 
+        summary={captureSummary} 
+        isOpen={isSummaryModalOpen}
+        onClose={() => setIsSummaryModalOpen(false)} 
+      />
+      {/* --- End of NEW section --- */}
     </div>
   );
 }
