@@ -3,13 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 
 const MAX_PACKETS_TO_STORE = 10000;
-const MAX_HISTORY_LENGTH = 30; // Number of data points for the charts
+const MAX_HISTORY_LENGTH = 30;
 
 export default function useWebSocket(url) {
   const [wsConnected, setWsConnected] = useState(false);
   const [metrics, setMetrics] = useState(null);
   const [packets, setPackets] = useState([]);
-  const [streamCount, setStreamCount] = useState(0);
   const [commandStatus, setCommandStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -18,6 +17,11 @@ export default function useWebSocket(url) {
   const [protocolDistribution, setProtocolDistribution] = useState({});
   const ws = useRef(null);
   const isStopping = useRef(false);
+
+  // --- NEW: States for AI Summary ---
+  const [captureSummary, setCaptureSummary] = useState(null);
+  const [summaryStatus, setSummaryStatus] = useState('idle'); // 'idle', 'loading', 'ready'
+  // --- End of NEW section ---
 
   useEffect(() => {
     ws.current = new WebSocket(url);
@@ -45,9 +49,7 @@ export default function useWebSocket(url) {
             setInterfaces(msg.interfaces || []);
             break;
           case "update":
-          case "metrics_update":
             setMetrics(msg.metrics);
-            setStreamCount(msg.stream_count || 0);
             setProtocolDistribution(msg.metrics.protocol_distribution || {});
 
             setMetricsHistory(prevHistory => {
@@ -73,10 +75,22 @@ export default function useWebSocket(url) {
               isStopping.current = false;
               setMetrics(null);
               setPackets([]);
-              setStreamCount(0);
               setMetricsHistory([]);
               setProtocolDistribution({});
+              // --- NEW: Reset summary on new capture ---
+              setCaptureSummary(null);
+              setSummaryStatus('idle');
+              // --- End of NEW section ---
             }
+            // --- NEW: Handle summary from stop_capture response ---
+            if (msg.command === "stop_capture" && msg.summary) {
+              setCaptureSummary(msg.summary);
+              setSummaryStatus('ready');
+            } else if (msg.command === "stop_capture") {
+              // If stop command is received without a summary, ensure we are not in loading state
+              setSummaryStatus('idle');
+            }
+            // --- End of NEW section ---
             break;
           default:
             break;
@@ -90,21 +104,35 @@ export default function useWebSocket(url) {
   }, [url]);
 
   const sendCommand = (command, payload = {}) => {
-    setLoading(true);
+    // <-- START: UPDATED LOGIC
     if (command === "stop_capture") {
-      isStopping.current = true;
-      setMetrics(prev => ({ ...prev, status: "stopped" }));
-      setLoading(false);
+      // Only show the "Generating Summary..." status if a capture is actually running.
+      if (metrics?.status === 'running') {
+        isStopping.current = true;
+        // Optimistically update UI status to "stopped"
+        setMetrics(prev => ({ ...prev, status: "stopped" }));
+        setSummaryStatus('loading');
+      }
+      // If not running, still send the command to get the "tshark not running" message
+      // from the backend, but DO NOT set summary status to 'loading'.
+    } else {
+      setLoading(true);
     }
+    // <-- END: UPDATED LOGIC
+
     if (ws.current?.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({ command, ...payload }));
     } else {
       setError("Cannot send command: WebSocket is not connected.");
       setLoading(false);
+      if (command === "stop_capture") setSummaryStatus('idle'); // Reset if WS not connected
     }
   };
 
   return {
-    wsConnected, metrics, packets, streamCount, commandStatus, loading, error, sendCommand, interfaces, metricsHistory, protocolDistribution,
+    wsConnected, metrics, packets, commandStatus, loading, error, sendCommand, interfaces, metricsHistory, protocolDistribution,
+    // --- NEW: Export new states ---
+    captureSummary, summaryStatus,
+    // --- End of NEW section ---
   };
 }

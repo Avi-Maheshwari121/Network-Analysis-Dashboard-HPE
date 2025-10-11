@@ -1,4 +1,4 @@
-// avi-maheshwari121/network-analysis-dashboard-hpe/Network-Analysis-Dashboard-HPE-d12cfd16410c6685dd2d171d8840126ca82c0967/Frontend/src/App.jsx
+// App.jsx
 
 import { useState } from "react";
 import Sidebar from "./components/Sidebar";
@@ -15,7 +15,6 @@ function App() {
     wsConnected,
     metrics,
     packets,
-    streamCount,
     commandStatus,
     loading,
     error,
@@ -23,6 +22,10 @@ function App() {
     interfaces,
     metricsHistory,
     protocolDistribution,
+    // --- NEW: Get summary states from hook ---
+    captureSummary,
+    summaryStatus,
+    // --- End of NEW section ---
   } = useWebSocket(WEBSOCKET_URL);
 
   return (
@@ -33,7 +36,6 @@ function App() {
           <Dashboard
             wsConnected={wsConnected}
             metrics={metrics}
-            streamCount={streamCount}
             commandStatus={commandStatus}
             loading={loading}
             error={error}
@@ -41,6 +43,10 @@ function App() {
             interfaces={interfaces}
             metricsHistory={metricsHistory}
             protocolDistribution={protocolDistribution}
+            // --- NEW: Pass summary props down ---
+            captureSummary={captureSummary}
+            summaryStatus={summaryStatus}
+            // --- End of NEW section ---
           />
         ) : (
           <RawData
