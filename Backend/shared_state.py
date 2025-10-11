@@ -46,3 +46,6 @@ expected_packets_total = 0
 
 # Ip Address List
 ip_address = []
+
+# List to store a history of metrics for the session summary
+session_metrics_history = []
