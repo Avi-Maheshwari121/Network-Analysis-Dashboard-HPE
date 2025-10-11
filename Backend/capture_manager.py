@@ -19,27 +19,21 @@ protocol_map = {
 }
 
 
-def get_device_ips(interface_name = "Wi-Fi"):
+def get_device_ips():
+    """Get all IPv4 and IPv6 addresses from all network interfaces."""
     device_ips = []
     
     try:
         all_addrs = psutil.net_if_addrs()
         
-        if interface_name not in all_addrs:
-            print(f"Interface '{interface_name}' not found. Available interfaces: {list(all_addrs.keys())}")
-            return device_ips
+        for iface_name, addrs in all_addrs.items():
+            for addr in addrs:
+                if addr.family == socket.AF_INET:  # IPv4
+                    device_ips.append(addr.address)
+                elif addr.family == socket.AF_INET6:  # IPv6
+                    ip6_without_zone = addr.address.split('%')[0]  # strip %zone
+                    device_ips.append(ip6_without_zone)
         
-        for addr in all_addrs[interface_name]:
-            if addr.family == socket.AF_INET:  # IPv4
-                device_ips.append(addr.address)
-                
-            elif addr.family == socket.AF_INET6:  # IPv6
-                ip6_with_zone = addr.address          # keep %zone
-                ip6_without_zone = addr.address.split('%')[0]  # strip %zone
-                
-                device_ips.append(ip6_with_zone)
-                device_ips.append(ip6_without_zone)
-                
         # Remove duplicates
         device_ips = list(set(device_ips))
                 
