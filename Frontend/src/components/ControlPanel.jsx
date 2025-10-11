@@ -29,7 +29,7 @@ export default function ControlPanel({ sendCommand, loading, commandStatus, inte
     }
 
     // Frontend check: only allow interfaces with "wi-fi" in the name
-    const isWifi = /wi-fi/i.test(selectedInterface.name);
+    const isWifi = /(wi[-\s]?fi|wireless|wlan|802\.11|airport|en0|en1)/i.test(selectedInterface.name);
 
     if (isWifi) {
       sendCommand("start_capture", { interface: selectedInterface.id });
