@@ -10,7 +10,7 @@ import socket
 # Map IP protocol numbers to names -> Global Object
 protocol_map = {
     "6": "tcp",      # TCP
-    "17": "udp",     # UDP  
+    "17": "udp",     # UDP
     "1": "icmp",     # ICMP
     "2": "igmp",     # IGMP
     "47": "gre",     # GRE
@@ -89,11 +89,11 @@ def start_tshark(interface = "Wi-Fi"):
             "-i", interface,
             "-T", "fields",
             "-e", "frame.number",
-            "-e", "frame.time_epoch", 
-            "-e", "ip.src", 
+            "-e", "frame.time_epoch",
+            "-e", "ip.src",
             "-e", "ip.dst",
             "-e", "frame.len", # bytes
-            "-e", "_ws.col.Protocol", # Gives highest level protocol 
+            "-e", "_ws.col.Protocol", # Gives highest level protocol
             "-e", "_ws.col.Info",
             "-e", "tcp.stream",
             "-e", "udp.stream",
@@ -103,7 +103,7 @@ def start_tshark(interface = "Wi-Fi"):
             "-e", "tcp.analysis.spurious_retransmission",
             "-e", "rtp.ssrc",
             "-e", "rtp.seq",
-            "-e", "ip.proto", # 15 
+            "-e", "ip.proto", # 15
             "-e", "ipv6.src", # 16
             "-e", "ipv6.dst", # 17
             "-e", "rtp.timestamp",  # 18 - NEW: RTP timestamp for jitter
@@ -147,6 +147,7 @@ def stop_tshark():
             # Reset all shared state data
             shared_state.streams = {}
             shared_state.all_packets_history = []
+            shared_state.session_metrics_history = [] # <-- UPDATED: Reset session history
             shared_state.lost_packets_total = 0
             shared_state.expected_packets_total = 0
             shared_state.protocol_distribution = {
@@ -179,12 +180,12 @@ def stop_tshark():
         return False, "Tshark was not running"
     
 
-# Parse packet once and store only needed fields for display    
+# Parse packet once and store only needed fields for display
 # T.C: O(1) for 1 packet
 def parse_and_store_packet(parts):
     try:
         frame_number = parts[0] or "N/A"
-        timestamp = parts[1] or "N/A" 
+        timestamp = parts[1] or "N/A"
 
         source_ip = parts[2] or parts[16] or "N/A"  # ip.src or ipv6.src
         dest_ip = parts[3] or parts[17] or "N/A"    # ip.dst or ipv6.dst
@@ -216,12 +217,12 @@ def parse_and_store_packet(parts):
     except Exception as e:
         # Return minimal data on error
         return {
-            "no": "N/A", 
-            "time": "N/A", 
-            "source": "N/A", 
-            "destination": "N/A", 
-            "protocol": "N/A", 
-            "length": "0", 
+            "no": "N/A",
+            "time": "N/A",
+            "source": "N/A",
+            "destination": "N/A",
+            "protocol": "N/A",
+            "length": "0",
             "info": "N/A"
         }
 
@@ -231,11 +232,11 @@ def capture_packets(duration):
     if not shared_state.tshark_proc or not shared_state.capture_active:
         return
 
-    # Clear streams for current batch 
+    # Clear streams for current batch
     shared_state.streams = {}
 
     # Cleared all_packets_history also
-    shared_state.all_packets_history = [] 
+    shared_state.all_packets_history = []
     
     start = time.time()
     new_packets_count = 0
