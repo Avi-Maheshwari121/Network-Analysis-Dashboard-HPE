@@ -9,42 +9,52 @@ from websocket_server import start_websocket_server
 import capture_manager
 import shared_state
 
+async def cleanup_and_exit():
+    """Async cleanup before exit"""
+    try:
+        await capture_manager.stop_tshark()
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
+    finally:
+        import os
+        os._exit(0)
+
+
 def signal_handler(sig, frame):
     """Handle shutdown signals gracefully"""
     print("\nReceived shutdown signal. Cleaning up...")
-    capture_manager.stop_tshark()
     
-    # Instead of sys.exit(0), set a flag and let asyncio handle shutdown
+    # Set flag to stop capture
     shared_state.capture_active = False
     
-    # Exit more gracefully
-    import os
-    os._exit(0)  # Forces immediate exit without raising SystemExit
+    # If there's a running event loop, schedule the async cleanup
+    try:
+        loop = asyncio.get_running_loop()
+        # Schedule the coroutine in the running loop
+        loop.create_task(cleanup_and_exit())
+    except RuntimeError:
+        # No running loop, just exit
+        import os
+        os._exit(0)
 
 
 def main():
     """Main application entry point"""
-    # Set up signal handlers for graceful shutdown
-    # Without signal_handler, resources will leak because tshark not stopped, still running
-    # Resource Cleanup
-    # Pressing Ctrl + C in terminal to stop the program
-    signal.signal(signal.SIGINT, signal_handler) # Interrupt Signal
-    signal.signal(signal.SIGTERM, signal_handler) # Termination Signal
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
     
     print("Network Monitoring Dashboard - Backend")
     
     try:
         shared_state.ip_address = capture_manager.get_device_ips()
-        # Start the WebSocket server
-        asyncio.run(start_websocket_server()) # Async event loop
+        asyncio.run(start_websocket_server())
     except KeyboardInterrupt:
         print("\nApplication interrupted by user")
     except Exception as e:
         print(f"Application error: {e}")
     finally:
-        # Ensure cleanup
-        capture_manager.stop_tshark()
         print("Application shutdown complete")
+
 
 if __name__ == "__main__":
     main()

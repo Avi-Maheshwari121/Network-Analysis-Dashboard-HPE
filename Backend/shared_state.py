@@ -10,6 +10,7 @@ all_packets_history = []
 # Process state
 capture_active = False
 tshark_proc = None
+is_resetting = False  # Flag to block new connections during reset
 
 # WebSocket connections
 connected_clients = {}

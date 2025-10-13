@@ -24,9 +24,21 @@ export default function useWebSocket(url) {
   // --- End of NEW section ---
 
   useEffect(() => {
+    let isInitialized = false;  
+    
     ws.current = new WebSocket(url);
-    ws.current.onopen = () => setWsConnected(true);
-    ws.current.onclose = () => setWsConnected(false);
+    
+    ws.current.onopen = () => {
+      console.log('WebSocket CONNECTED - Waiting for initial_state');
+      setWsConnected(true);
+      setError(null);
+    };
+    
+    ws.current.onclose = () => {
+      console.log('WebSocket DISCONNECTED');
+      setWsConnected(false);
+    };
+    
     ws.current.onerror = () => setError("WebSocket connection error.");
 
     ws.current.onmessage = ({ data }) => {
@@ -34,16 +46,29 @@ export default function useWebSocket(url) {
         const msg = JSON.parse(data);
         setError(null);
 
+        // IGNORE messages until initialized 
+        if (!isInitialized && msg.type !== 'initial_state') {
+          console.warn(`IGNORING ${msg.type} - waiting for initial_state`);
+          return;
+        }
+
         if (isStopping.current && msg.metrics?.status === "running") return;
         if (msg.metrics?.status === "stopped") isStopping.current = false;
 
         switch (msg.type) {
           case "initial_state":
-            setMetrics(msg.metrics);
+            console.log('=== Received initial_state - RESETTING ===');
+            isInitialized = true;  // MARK AS INITIALIZED 
+            
+            setMetrics(msg.metrics || null);
             setPackets(msg.packets || []);
             setInterfaces(msg.interfaces || []);
             setMetricsHistory([]);
-            setProtocolDistribution(msg.metrics.protocol_distribution || {});
+            setProtocolDistribution(msg.metrics?.protocol_distribution || {});
+            setCommandStatus(null);
+            setCaptureSummary(null);
+            setSummaryStatus('idle');
+            isStopping.current = false;
             break;
           case "interfaces_response":
             setInterfaces(msg.interfaces || []);

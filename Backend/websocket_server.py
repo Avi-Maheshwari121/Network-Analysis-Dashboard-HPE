@@ -87,22 +87,26 @@ async def generate_summary():
         )
         return mock_summary
 
-# --- Core WebSocket Logic (Using Teammate's Robust Version) ---
 async def data_collection_loop():
-    """Continuously collect data and send delta updates to clients."""
+    """Continuously collect data and send updates to clients - ASYNC VERSION"""
     while True:
         await asyncio.sleep(0.1)
         
         if not capture_manager.is_capture_active():
             continue
         
+        # Skip if no clients
         if not shared_state.connected_clients:
-            print("No clients connected, stopping capture...")
-            capture_manager.stop_tshark()
-            metrics_calculator.update_metrics_status("stopped")
+            await asyncio.sleep(0.5)
             continue
 
-        capture_manager.capture_packets(1.5)
+        # ASYNC CAPTURE - This won't block the event loop
+        await capture_manager.capture_packets(1.5)
+
+        # Check again after capture if clients or not
+        if not shared_state.connected_clients:
+            continue
+        
         metrics_calculator.calculate_metrics()
         current_metrics = metrics_calculator.get_metrics_state()
         shared_state.session_metrics_history.append(current_metrics)
@@ -132,15 +136,17 @@ async def handle_command(command, data):
         return {"type": "interfaces_response", "interfaces": interfaces}
     
     elif command == "start_capture":
-        capture_manager.clear_all_packets()
-        interface = data.get("interface", "Wi-Fi")
-        success, msg = capture_manager.start_tshark(interface)
-        if success:
-            metrics_calculator.update_metrics_status("running")
+        if shared_state.tshark_proc is not None:
+            success, msg = False, "Tshark already running"
+        else:
+            capture_manager.clear_all_packets()
+            interface = data.get("interface", "1")
+            success, msg = await capture_manager.start_tshark(interface)
+            if success:
+                metrics_calculator.update_metrics_status("running")
         return {"type": "command_response", "command": "start_capture", "success": success, "message": msg}
     
     elif command == "stop_capture":
-        # This is your corrected summary logic
         should_summarize = shared_state.capture_active and bool(shared_state.session_metrics_history)
         
         summary = None
@@ -149,7 +155,7 @@ async def handle_command(command, data):
             summary = await generate_summary()
             print("Summary generated.")
 
-        success, msg = capture_manager.stop_tshark()
+        success, msg = await capture_manager.stop_tshark()
         if success:
             metrics_calculator.update_metrics_status("stopped")
         
@@ -174,6 +180,11 @@ async def websocket_handler(websocket):
     """Handle a single WebSocket client connection."""
     client_id = id(websocket)
     try:
+        # WAIT if system is resetting 
+        while shared_state.is_resetting:
+            print(f"Client {client_id} waiting - system is resetting...")
+            await asyncio.sleep(0.1)
+
         shared_state.connected_clients[websocket] = {"connected_at": datetime.now().isoformat()}
         print(f"Client {client_id} connected. Total clients: {len(shared_state.connected_clients)}")
         
@@ -199,7 +210,6 @@ async def websocket_handler(websocket):
         print(f"Client {client_id} connection closed.")
         
     finally:
-        # This robust 'finally' block is from your teammate's code
         if websocket in shared_state.connected_clients:
             del shared_state.connected_clients[websocket]
         
@@ -208,8 +218,20 @@ async def websocket_handler(websocket):
         
         if remaining == 0 and capture_manager.is_capture_active():
             print("Last client disconnected, stopping capture...")
-            capture_manager.stop_tshark()
+            
+            # SET RESETTING FLAG 
+            shared_state.is_resetting = True
+            
+            await capture_manager.stop_tshark()
             metrics_calculator.update_metrics_status("stopped")
+            
+            # Wait for complete reset 
+            await asyncio.sleep(0.3)
+            
+            # CLEAR RESETTING FLAG 
+            shared_state.is_resetting = False
+            
+            print("RESET COMPLETE - Ready for new connections")
 
 async def start_websocket_server():
     """Start the WebSocket server and the data collection loop."""
