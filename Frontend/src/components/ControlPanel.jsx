@@ -21,24 +21,16 @@ export default function ControlPanel({ sendCommand, loading, commandStatus, inte
     </button>
   );
 
-  // --- RESTORED Wi-Fi CHECK LOGIC ---
+  // UPDATED: Allow all interfaces
   const handleStartCapture = () => {
     if (!selectedInterface) {
       alert("Please select a network interface.");
       return;
     }
 
-    // Frontend check: only allow interfaces with "wi-fi" in the name
-    const isWifi = /(wi[-\s]?fi|wireless|wlan|802\.11|airport|en0|en1)/i.test(selectedInterface.name);
-
-    if (isWifi) {
-      sendCommand("start_capture", { interface: selectedInterface.id });
-      setIsModalOpen(false);
-    } else {
-      alert("This feature is currently limited to Wi-Fi interfaces to prevent application instability. Please select a Wi-Fi adapter.");
-    }
+    sendCommand("start_capture", { interface: selectedInterface.id });
+    setIsModalOpen(false);
   };
-  // --- END OF RESTORED LOGIC ---
 
   const AISummaryButton = () => {
     if (summaryStatus === 'idle') {
@@ -87,11 +79,6 @@ export default function ControlPanel({ sendCommand, loading, commandStatus, inte
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
           <div className="bg-surface-dark p-6 rounded-lg shadow-lg w-full max-w-md border border-border-dark">
             <h2 className="text-xl font-bold mb-4">Select Network Interface</h2>
-            {/* --- RESTORED NOTE --- */}
-            <p className="text-sm text-text-secondary mb-4">
-              Note: Live capture is only enabled for Wi-Fi interfaces.
-            </p>
-            {/* --- END OF RESTORED NOTE --- */}
             <select
               value={selectedInterface?.id || ''}
               onChange={(e) => {
