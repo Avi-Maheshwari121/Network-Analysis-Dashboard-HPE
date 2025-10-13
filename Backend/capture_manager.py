@@ -5,6 +5,7 @@ import shared_state
 import re
 import psutil
 import socket
+import asyncio
 
 
 # Map IP protocol numbers to names -> Global Object
@@ -47,47 +48,57 @@ def get_device_ips():
 def get_network_interfaces():
     """Get a list of available network interfaces using tshark."""
     try:
-        # Execute tshark -D to list interfaces
         proc = subprocess.run(
             ["tshark", "-D"],
             capture_output=True,
             text=True,
             check=True
         )
-        # Parse the output to get both ID and descriptive name
         interfaces = []
         output = proc.stdout.strip()
         lines = output.split('\n')
+        
         for line in lines:
-            match = re.search(r'^\d+\.\s+(.+?)(?:\s+\((.+)\))?$', line)
+            match = re.match(r'^(\d+)\.\s+(.+?)(?:\s+\((.+?)\))?$', line)
             if match:
-                interface_id = match.group(1).strip()
-                descriptive_name = match.group(2).strip() if match.group(2) else interface_id
-                interfaces.append({"id": interface_id, "name": descriptive_name})
+                interface_num = match.group(1)
+                full_interface_path = match.group(2).strip()
+                descriptive_name = match.group(3).strip() if match.group(3) else full_interface_path
+                
+                interfaces.append({
+                    "id": interface_num,
+                    "name": descriptive_name,
+                    "full_path": full_interface_path
+                })
+        
+        print(f"Found {len(interfaces)} network interfaces")
         return interfaces
     except Exception as e:
         print(f"Error getting network interfaces: {e}")
-        # Provide a default list if tshark command fails
-        return [{"id": "Wi-Fi", "name": "Wi-Fi (Default)"}, {"id": "Ethernet", "name": "Ethernet (Default)"}]
+        return [{"id": "1", "name": "Default Interface"}]
     
 
 
-# Starts Tshark Subprocess
-def start_tshark(interface = "Wi-Fi"):
+async def start_tshark(interface = "1"):
+    """Start tshark with the specified interface (number or name)"""
+    
     if shared_state.tshark_proc is not None:
         return False, "Tshark already running"
     
     try:
+        print(f"Starting tshark on interface: {interface}")
+        
         tshark_cmd = [
             "tshark",
-            "-i", interface,
-            "-T", "fields",
+            "-i", str(interface),
+            "-T", "fields", 
+            "-l",
             "-e", "frame.number",
             "-e", "frame.time_epoch",
             "-e", "ip.src",
             "-e", "ip.dst",
-            "-e", "frame.len", # bytes
-            "-e", "_ws.col.Protocol", # Gives highest level protocol
+            "-e", "frame.len",
+            "-e", "_ws.col.Protocol",
             "-e", "_ws.col.Info",
             "-e", "tcp.stream",
             "-e", "udp.stream",
@@ -97,51 +108,82 @@ def start_tshark(interface = "Wi-Fi"):
             "-e", "tcp.analysis.spurious_retransmission",
             "-e", "rtp.ssrc",
             "-e", "rtp.seq",
-            "-e", "ip.proto", # 15
-            "-e", "ipv6.src", # 16
-            "-e", "ipv6.dst", # 17
-            "-e", "rtp.timestamp",  # 18 - NEW: RTP timestamp for jitter
-            "-e", "rtp.p_type",     # 19 - NEW: RTP payload type
-            "-e", "ipv6.nxt", # 20
+            "-e", "ip.proto",
+            "-e", "ipv6.src",
+            "-e", "ipv6.dst",
+            "-e", "rtp.timestamp",
+            "-e", "rtp.p_type",
+            "-e", "ipv6.nxt",
             "-E", "separator=|",
             "-E", "occurrence=f",
             "-E", "header=n",
             "-E", "quote=n"
         ]
         
-        shared_state.tshark_proc = subprocess.Popen(
-            tshark_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True, # All fields are initially string
-            bufsize=1 # Line Buffered Output
+        # Create async subprocess
+        shared_state.tshark_proc = await asyncio.create_subprocess_exec(
+            *tshark_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
         )
         
+        # Wait a bit and check if process started
+        await asyncio.sleep(0.2)
+                
+        if shared_state.tshark_proc.returncode is not None:
+            try:
+                stderr_output = await asyncio.wait_for(
+                    shared_state.tshark_proc.stderr.read(),
+                    timeout = 1.5
+                )
+                error_msg = stderr_output.decode()
+                print(f"Tshark failed to start: {error_msg}")
+            except:
+                error_msg = "Unknown error"
+            shared_state.tshark_proc = None
+            return False, f"Failed to start tshark on interface {interface}: {error_msg}"
+        
         shared_state.capture_active = True
-        print("Tshark started successfully")
-        return True, "Tshark started successfully"
+        print(f"Tshark started successfully on interface {interface}")
+        return True, f"Tshark started on interface {interface}"
+        
+    except FileNotFoundError:
+        print("Tshark not found. Please install Wireshark/tshark.")
+        return False, "Tshark not found. Please install Wireshark."
     except Exception as e:
         print(f"Error starting tshark: {e}")
+        if shared_state.tshark_proc:
+            shared_state.tshark_proc = None
         return False, f"Error starting tshark: {e}"
 
 
-def stop_tshark():
+async def stop_tshark():
     """Stop tshark packet capture process"""
     if shared_state.tshark_proc:
+        print("Stopping tshark...")
         try:
-            shared_state.tshark_proc.terminate()
-            shared_state.tshark_proc.wait(timeout = 5)
-        except subprocess.TimeoutExpired:
-            shared_state.tshark_proc.kill() # Forcefully kills tshark after timeout
-            shared_state.tshark_proc.wait()
+            shared_state.capture_active = False
+            await asyncio.sleep(0.2)
+            
+            try:
+                shared_state.tshark_proc.terminate()
+                await asyncio.wait_for(shared_state.tshark_proc.wait(), timeout=3.0)
+                print("Tshark terminated gracefully")
+            except asyncio.TimeoutError:
+                print("Tshark didn't terminate, forcing kill...")
+                shared_state.tshark_proc.kill()
+                await shared_state.tshark_proc.wait()
+                print("Tshark killed")
+                
+        except Exception as e:
+            print(f"Error stopping tshark: {e}")
         finally:
             shared_state.tshark_proc = None
             shared_state.capture_active = False
 
-            # Reset all shared state data
             shared_state.streams = {}
             shared_state.all_packets_history = []
-            shared_state.session_metrics_history = [] # <-- UPDATED: Reset session history
+            shared_state.session_metrics_history = []
             shared_state.lost_packets_total = 0
             shared_state.expected_packets_total = 0
             shared_state.protocol_distribution = {
@@ -168,9 +210,10 @@ def stop_tshark():
                 "totalPackets": 0
             })
             
-            print("Tshark stopped")
+            print("Tshark stopped and state reset")
         return True, "Tshark stopped successfully"
     else:
+        print("Tshark was not running")
         return False, "Tshark was not running"
     
 
@@ -221,15 +264,12 @@ def parse_and_store_packet(parts):
         }
 
 
-def capture_packets(duration):
-    """Capture packets for specified duration"""
+async def capture_packets(duration):
+    """Capture packets for specified duration using async readline"""
     if not shared_state.tshark_proc or not shared_state.capture_active:
         return
 
-    # Clear streams for current batch
     shared_state.streams = {}
-
-    # Cleared all_packets_history also
     shared_state.all_packets_history = []
     
     start = time.time()
@@ -238,46 +278,53 @@ def capture_packets(duration):
     while time.time() - start < duration and shared_state.capture_active:
         try:
             # Check if process is still alive
-            if shared_state.tshark_proc.poll() is not None:
+            if shared_state.tshark_proc.returncode is not None:
                 print("Tshark process terminated unexpectedly")
                 break
             
-            line = shared_state.tshark_proc.stdout.readline()
-            if not line:
+            # It won't block the event loop, so frontend commands still work
+            try:
+                line_bytes = await asyncio.wait_for(
+                    shared_state.tshark_proc.stdout.readline(),
+                    timeout = 1.0
+                )
+            except asyncio.TimeoutError:
+                # No data available, continue loop
+                continue
+            
+            if not line_bytes:
                 break
+            
+            line = line_bytes.decode('utf-8', errors='ignore').strip()
+            if not line:
+                continue
 
-            # Split line into fields using pipe separator
-            parts = line.strip().split("|")
+            parts = line.split("|")
            
-            # Parse and store formatted packet for display (EFFICIENT)
             formatted_packet = parse_and_store_packet(parts)
             if formatted_packet:
                 shared_state.all_packets_history.append(formatted_packet)
                 new_packets_count += 1
 
-            # Group by stream for metrics calculation
-            ip_proto = parts[15]  or "N/A"
-            proto = parts[5] or "N/A"   # Text protocol field
-            tcp_stream = parts[7] or "N/A"
-            udp_stream = parts[8] or "N/A"
-            rtp_ssrc = parts[13] or "N/A"
-            proto_temp = parts[20] or "N/A"
+            ip_proto = parts[15] if len(parts) > 15 else "N/A"
+            proto = parts[5] if len(parts) > 5 else "N/A"
+            tcp_stream = parts[7] if len(parts) > 7 else "N/A"
+            udp_stream = parts[8] if len(parts) > 8 else "N/A"
+            rtp_ssrc = parts[13] if len(parts) > 13 else "N/A"
+            proto_temp = parts[20] if len(parts) > 20 else "N/A"
 
-            # Get protocol name from number
             proto_name = protocol_map.get(ip_proto, None)
             proto_temp = protocol_map.get(proto_temp, None)
 
-            # Stream classification with numeric protocol mapping
             if (proto_name == "tcp" or proto == "tcp" or proto_temp == "tcp") and tcp_stream != "N/A":
                 key = ("tcp", tcp_stream)
             elif proto_name == "udp" and udp_stream != "N/A":
                 key = ("udp", udp_stream)
-            elif "RTP" in proto.upper() and rtp_ssrc != "N/A":  # RTP uses text field
+            elif "RTP" in proto.upper() and rtp_ssrc != "N/A":
                 key = ("rtp", rtp_ssrc)
             else:
                 key = ("other", "misc")
 
-            # Add packet to stream group
             if key not in shared_state.streams:
                 shared_state.streams[key] = []
             shared_state.streams[key].append(parts)

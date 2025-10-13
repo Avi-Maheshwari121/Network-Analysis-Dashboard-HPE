@@ -98,8 +98,6 @@ def calculate_metrics():
             "outbound_throughput": 0.0,
             "latency": 0.0,
             "jitter": 0.0,
-            "packet_loss_count": 0,
-            "packet_loss_percent": 0.0,
             "last_update": datetime.now().isoformat(),
             "protocol_distribution": shared_state.protocol_distribution,
             "streamCount": 0,
