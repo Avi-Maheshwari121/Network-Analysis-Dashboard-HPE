@@ -1,3 +1,4 @@
+// Frontend/src/components/Sidebar.jsx
 export default function Sidebar({ activeView, setActiveView }) {
   const NavButton = ({ view, children }) => (
     <button
@@ -18,6 +19,9 @@ export default function Sidebar({ activeView, setActiveView }) {
       <nav className="flex flex-col gap-4">
         <NavButton view="dashboard">Dashboard</NavButton>
         <NavButton view="rawdata">Raw Data</NavButton>
+        <NavButton view="protocolstats">Protocol Stats</NavButton>
+        {/* Changed name to Traffic Composition */}
+        <NavButton view="trafficcomposition">Traffic Composition</NavButton>
       </nav>
     </aside>
   );
