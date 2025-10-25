@@ -1,163 +1,321 @@
-// avi-maheshwari121/network-analysis-dashboard-hpe/Network-Analysis-Dashboard-HPE-d12cfd16410c6685dd2d171d8840126ca82c0967/Frontend/src/hooks/useWebsocket.js
-
-import { useState, useRef, useEffect } from "react";
+// Frontend/src/hooks/useWebsocket.js
+import { useState, useRef, useEffect, useMemo } from "react";
 
 const MAX_PACKETS_TO_STORE = 10000;
-const MAX_HISTORY_LENGTH = 30;
+const MAX_HISTORY_LENGTH = 30; // History length for charts
+
+// Helper function to calculate KPIs from history
+const calculateThroughputKPIs = (history) => {
+  if (!history || history.length === 0) {
+    return { peakIn: 0, peakOut: 0, avgIn: 0, avgOut: 0 };
+  }
+  let peakIn = 0;
+  let peakOut = 0;
+  let sumIn = 0;
+  let sumOut = 0;
+  history.forEach(entry => {
+    const inVal = Number(entry.inbound_throughput || 0);
+    const outVal = Number(entry.outbound_throughput || 0);
+    peakIn = Math.max(peakIn, inVal);
+    peakOut = Math.max(peakOut, outVal);
+    sumIn += inVal;
+    sumOut += outVal;
+  });
+  const count = history.length;
+  return {
+    peakIn: peakIn.toFixed(2),
+    peakOut: peakOut.toFixed(2),
+    avgIn: (sumIn / count).toFixed(2),
+    avgOut: (sumOut / count).toFixed(2),
+  };
+};
+
 
 export default function useWebSocket(url) {
   const [wsConnected, setWsConnected] = useState(false);
-  const [metrics, setMetrics] = useState(null);
+  const [metrics, setMetrics] = useState(null); // Contains overall packets_per_second
   const [packets, setPackets] = useState([]);
   const [commandStatus, setCommandStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [interfaces, setInterfaces] = useState([]);
-  const [metricsHistory, setMetricsHistory] = useState([]);
+  const [metricsHistory, setMetricsHistory] = useState([]); // Global history
   const [protocolDistribution, setProtocolDistribution] = useState({});
   const ws = useRef(null);
+
+  // --- State for Protocol Specific Metrics ---
+  const [tcpMetrics, setTcpMetrics] = useState(null);
+  const [rtpMetrics, setRtpMetrics] = useState(null);
+  const [udpMetrics, setUdpMetrics] = useState(null);
+  const [quicMetrics, setQuicMetrics] = useState(null);
+  const [ipv4Metrics, setIpv4Metrics] = useState(null); // Keep for Traffic Comp page
+  const [ipv6Metrics, setIpv6Metrics] = useState(null); // Keep for Traffic Comp page
+  const [dnsMetrics, setDnsMetrics] = useState(null);   // <-- Added DNS
+  const [igmpMetrics, setIgmpMetrics] = useState(null); // <-- Added IGMP
+  const [ipComposition, setIpComposition] = useState(null); // Includes cumulative now
+
+  // --- State for Protocol Specific Throughput History ---
+  const [tcpHistory, setTcpHistory] = useState([]);
+  const [rtpHistory, setRtpHistory] = useState([]);
+  const [udpHistory, setUdpHistory] = useState([]);
+  const [quicHistory, setQuicHistory] = useState([]);
+  const [ipv4History, setIpv4History] = useState([]); // Keep for Traffic Comp page
+  const [ipv6History, setIpv6History] = useState([]); // Keep for Traffic Comp page
+  const [dnsHistory, setDnsHistory] = useState([]);   // <-- Added DNS history
+  const [igmpHistory, setIgmpHistory] = useState([]); // <-- Added IGMP history
+
+  // --- State for Full Protocol Metrics History (TCP Latency, RTP Jitter) ---
+  const [tcpFullMetricsHistory, setTcpFullMetricsHistory] = useState([]);
+  const [rtpFullMetricsHistory, setRtpFullMetricsHistory] = useState([]);
+
+  // packetsPerSecond state removed, using metrics.packets_per_second
+
   const isStopping = useRef(false);
 
-  // --- NEW: States for AI Summary ---
+  // --- States for AI Summary ---
   const [captureSummary, setCaptureSummary] = useState(null);
-  const [summaryStatus, setSummaryStatus] = useState('idle'); // 'idle', 'loading', 'ready'
-  // --- End of NEW section ---
+  const [summaryStatus, setSummaryStatus] = useState('idle');
 
   useEffect(() => {
-    let isInitialized = false;  
-    
+    let isInitialized = false;
     ws.current = new WebSocket(url);
-    
+
     ws.current.onopen = () => {
       console.log('WebSocket CONNECTED - Waiting for initial_state');
       setWsConnected(true);
       setError(null);
+       if (ws.current?.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ command: "get_interfaces" }));
+            ws.current.send(JSON.stringify({ command: "get_status" }));
+       }
     };
-    
     ws.current.onclose = () => {
       console.log('WebSocket DISCONNECTED');
       setWsConnected(false);
+       setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
     };
-    
-    ws.current.onerror = () => setError("WebSocket connection error.");
+    ws.current.onerror = (event) => {
+        console.error("WebSocket error observed:", event);
+        setError("WebSocket connection error. Is the backend running?");
+        setWsConnected(false);
+    };
 
     ws.current.onmessage = ({ data }) => {
       try {
         const msg = JSON.parse(data);
         setError(null);
 
-        // IGNORE messages until initialized 
-        if (!isInitialized && msg.type !== 'initial_state') {
-          console.warn(`IGNORING ${msg.type} - waiting for initial_state`);
-          return;
+        // Initialization checks (allow initial interfaces/status)
+        if (!isInitialized && msg.type === 'initial_state') {
+             console.log('=== Received initial_state ==='); isInitialized = true;
+        } else if (!isInitialized && msg.type === 'interfaces_response') { console.log('Received interfaces before initial_state');
+        } else if (!isInitialized && msg.type === 'status_response') {
+             console.log('Received status before initial_state'); setMetrics(msg.metrics || null);
+        } else if (!isInitialized && msg.type !== 'update') { console.warn(`Received ${msg.type} before explicit initial_state, processing...`); }
+
+        // Stopping logic
+        if (isStopping.current && msg.metrics?.status === "running" && msg.type === 'update') { console.log("Ignoring update..."); return; }
+        if (msg.metrics?.status === "stopped") {
+            setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
+            if (isStopping.current) { console.log("Backend confirmed stopped."); isStopping.current = false; }
         }
 
-        if (isStopping.current && msg.metrics?.status === "running") return;
-        if (msg.metrics?.status === "stopped") isStopping.current = false;
+        const timestamp = new Date().toLocaleTimeString();
 
         switch (msg.type) {
           case "initial_state":
-            console.log('=== Received initial_state - RESETTING ===');
-            isInitialized = true;  // MARK AS INITIALIZED 
-            
-            setMetrics(msg.metrics || null);
-            setPackets(msg.packets || []);
-            setInterfaces(msg.interfaces || []);
-            setMetricsHistory([]);
-            setProtocolDistribution(msg.metrics?.protocol_distribution || {});
-            setCommandStatus(null);
-            setCaptureSummary(null);
-            setSummaryStatus('idle');
-            isStopping.current = false;
+             isInitialized = true; // Ensure flag is set
+             setMetrics(msg.metrics || null);
+             setPackets(msg.packets || []);
+             setInterfaces(msg.interfaces || interfaces);
+             setMetricsHistory([]);
+             setProtocolDistribution(msg.metrics?.protocol_distribution || {});
+             setCommandStatus(null);
+             setTcpMetrics(msg.tcp_metrics || null);
+             setRtpMetrics(msg.rtp_metrics || null);
+             setUdpMetrics(msg.udp_metrics || null);
+             setQuicMetrics(msg.quic_metrics || null);
+             setIpv4Metrics(msg.ipv4_metrics || null);
+             setIpv6Metrics(msg.ipv6_metrics || null);
+             setDnsMetrics(msg.dns_metrics || null);     // <-- Reset DNS
+             setIgmpMetrics(msg.igmp_metrics || null);   // <-- Reset IGMP
+             setIpComposition(msg.ip_composition || null);
+             setTcpHistory([]); setRtpHistory([]); setUdpHistory([]);
+             setQuicHistory([]); setIpv4History([]); setIpv6History([]);
+             setDnsHistory([]); setIgmpHistory([]);      // <-- Reset DNS/IGMP History
+             setTcpFullMetricsHistory([]); setRtpFullMetricsHistory([]);
+             setCaptureSummary(null); setSummaryStatus('idle');
+             isStopping.current = false;
             break;
+
           case "interfaces_response":
             setInterfaces(msg.interfaces || []);
             break;
+
+          case "status_response":
+             setMetrics(msg.metrics || null);
+             setProtocolDistribution(msg.metrics?.protocol_distribution || {});
+            break;
+
           case "update":
-            setMetrics(msg.metrics);
+            setMetrics(msg.metrics); // Update overall metrics (includes packets_per_second)
             setProtocolDistribution(msg.metrics.protocol_distribution || {});
+            setTcpMetrics(msg.tcp_metrics);
+            setRtpMetrics(msg.rtp_metrics);
+            setUdpMetrics(msg.udp_metrics);
+            setQuicMetrics(msg.quic_metrics);
+            setIpv4Metrics(msg.ipv4_metrics);
+            setIpv6Metrics(msg.ipv6_metrics);
+            setDnsMetrics(msg.dns_metrics);     // <-- Update DNS
+            setIgmpMetrics(msg.igmp_metrics);   // <-- Update IGMP
+            setIpComposition(msg.ip_composition);
 
-            setMetricsHistory(prevHistory => {
-              const newEntry = {
-                time: new Date().toLocaleTimeString(),
-                inbound: parseFloat((msg.metrics.inbound_throughput || 0).toFixed(2)),
-                outbound: parseFloat((msg.metrics.outbound_throughput || 0).toFixed(2)),
-                latency: parseFloat(msg.metrics.latency.toFixed(1)),
-                jitter: parseFloat((msg.metrics.jitter || 0).toFixed(1)),
-              };
-              const updatedHistory = [...prevHistory, newEntry];
-              return updatedHistory.slice(-MAX_HISTORY_LENGTH);
-            });
+            // Update global metrics history
+            if (msg.metrics) {
+                setMetricsHistory(prevHistory => {
+                  const newEntry = {
+                    time: timestamp,
+                    inbound: parseFloat((msg.metrics.inbound_throughput || 0).toFixed(2)),
+                    outbound: parseFloat((msg.metrics.outbound_throughput || 0).toFixed(2)),
+                    latency: parseFloat(msg.metrics.latency?.toFixed(1) || 0),
+                    jitter: parseFloat((msg.metrics.jitter || 0).toFixed(1)),
+                  };
+                  return [...prevHistory, newEntry].slice(-MAX_HISTORY_LENGTH);
+                });
+            }
 
-            if (msg.new_packets?.length > 0) {
-              setPackets(prev => [...prev, ...msg.new_packets].slice(-MAX_PACKETS_TO_STORE));
+            // --- Update protocol-specific throughput history (robustly) ---
+            const updateProtocolHistory = (setter, metricsData) => {
+              if (metricsData && metricsData.hasOwnProperty('inbound_throughput') && metricsData.hasOwnProperty('outbound_throughput')) {
+                const inThrRaw = metricsData.inbound_throughput;
+                const outThrRaw = metricsData.outbound_throughput;
+                let inThrNum = parseFloat(inThrRaw || 0);
+                let outThrNum = parseFloat(outThrRaw || 0);
+                inThrNum = isNaN(inThrNum) ? 0 : inThrNum;
+                outThrNum = isNaN(outThrNum) ? 0 : outThrNum;
+                setter(prev => [
+                  ...prev, { time: timestamp, inbound_throughput: inThrNum, outbound_throughput: outThrNum }
+                ].slice(-MAX_HISTORY_LENGTH));
+              }
+            };
+            updateProtocolHistory(setTcpHistory, msg.tcp_metrics);
+            updateProtocolHistory(setRtpHistory, msg.rtp_metrics);
+            updateProtocolHistory(setUdpHistory, msg.udp_metrics);
+            updateProtocolHistory(setQuicHistory, msg.quic_metrics);
+            updateProtocolHistory(setIpv4History, msg.ipv4_metrics);
+            updateProtocolHistory(setIpv6History, msg.ipv6_metrics);
+            updateProtocolHistory(setDnsHistory, msg.dns_metrics);   // <-- Update DNS History
+            updateProtocolHistory(setIgmpHistory, msg.igmp_metrics); // <-- Update IGMP History
+
+            // Update full metrics history for TCP and RTP
+             if (msg.tcp_metrics) {
+               setTcpFullMetricsHistory(prev => [
+                   ...prev, { time: timestamp, ...msg.tcp_metrics, latency: Number(msg.tcp_metrics.latency || 0) }
+               ].slice(-MAX_HISTORY_LENGTH));
+             }
+             if (msg.rtp_metrics) {
+                 setRtpFullMetricsHistory(prev => [
+                     ...prev, { time: timestamp, ...msg.rtp_metrics, jitter: Number(msg.rtp_metrics.jitter || 0) }
+                 ].slice(-MAX_HISTORY_LENGTH));
+             }
+
+            // Handle packet updates
+            if (msg.new_packets && Array.isArray(msg.new_packets) && msg.new_packets.length > 0) {
+              setPackets(prevPackets => {
+                  const updatedPackets = [...prevPackets, ...msg.new_packets];
+                  return updatedPackets.length > MAX_PACKETS_TO_STORE
+                      ? updatedPackets.slice(-MAX_PACKETS_TO_STORE)
+                      : updatedPackets;
+              });
             }
             break;
+
           case "command_response":
             setCommandStatus(msg);
             setLoading(false);
             if (msg.command === "start_capture" && msg.success) {
               isStopping.current = false;
-              setMetrics(null);
-              setPackets([]);
-              setMetricsHistory([]);
-              setProtocolDistribution({});
-              // --- NEW: Reset summary on new capture ---
-              setCaptureSummary(null);
-              setSummaryStatus('idle');
-              // --- End of NEW section ---
-            }
-            // --- NEW: Handle summary from stop_capture response ---
-            if (msg.command === "stop_capture" && msg.summary) {
-              setCaptureSummary(msg.summary);
-              setSummaryStatus('ready');
+              setMetrics(prev => ({ ...(prev || {}), status: "running" }));
+              setPackets([]); setMetricsHistory([]); setProtocolDistribution({});
+              setTcpMetrics(null); setRtpMetrics(null); setUdpMetrics(null);
+              setQuicMetrics(null); setIpv4Metrics(null); setIpv6Metrics(null);
+              setDnsMetrics(null); setIgmpMetrics(null); // <-- Reset DNS/IGMP
+              setIpComposition(null); setTcpHistory([]); setRtpHistory([]);
+              setUdpHistory([]); setQuicHistory([]); setIpv4History([]);
+              setIpv6History([]); setDnsHistory([]); setIgmpHistory([]); // <-- Reset DNS/IGMP History
+              setTcpFullMetricsHistory([]); setRtpFullMetricsHistory([]);
+              setCaptureSummary(null); setSummaryStatus('idle');
+            } else if (msg.command === "start_capture" && !msg.success) {
+                 setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
             } else if (msg.command === "stop_capture") {
-              // If stop command is received without a summary, ensure we are not in loading state
-              setSummaryStatus('idle');
+                setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
+                isStopping.current = false;
+                if (msg.summary) {
+                    setCaptureSummary(msg.summary); setSummaryStatus('ready');
+                } else { setSummaryStatus('idle'); }
             }
-            // --- End of NEW section ---
+             setTimeout(() => setCommandStatus(null), 5000);
             break;
           default:
+             console.log("Received unknown message type:", msg.type);
             break;
         }
       } catch (e) {
-        setError("Invalid data received from backend.");
+        console.error("WebSocket onmessage error:", e);
+        if (!(e instanceof DOMException && e.name === 'AbortError') && ws.current?.readyState !== WebSocket.CLOSED) {
+           setError(`Error processing message: ${e.message}`);
+        }
       }
     };
 
-    return () => ws.current?.close();
+    return () => {
+        if (ws.current) {
+            console.log("Cleaning up WebSocket connection.");
+            ws.current.close();
+            isInitialized = false;
+        }
+    };
   }, [url]);
 
   const sendCommand = (command, payload = {}) => {
-    // <-- START: UPDATED LOGIC
-    if (command === "stop_capture") {
-      // Only show the "Generating Summary..." status if a capture is actually running.
-      if (metrics?.status === 'running') {
-        isStopping.current = true;
-        // Optimistically update UI status to "stopped"
-        setMetrics(prev => ({ ...prev, status: "stopped" }));
-        setSummaryStatus('loading');
-      }
-      // If not running, still send the command to get the "tshark not running" message
-      // from the backend, but DO NOT set summary status to 'loading'.
-    } else {
-      setLoading(true);
-    }
-    // <-- END: UPDATED LOGIC
-
-    if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({ command, ...payload }));
-    } else {
+    console.log(`Sending command: ${command}`, payload);
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
       setError("Cannot send command: WebSocket is not connected.");
       setLoading(false);
-      if (command === "stop_capture") setSummaryStatus('idle'); // Reset if WS not connected
+      if (command === "stop_capture") { setSummaryStatus('idle'); isStopping.current = false; }
+      return;
     }
+    if (command === "stop_capture") {
+      if (metrics?.status === 'running') {
+        console.log("Initiating stop capture..."); isStopping.current = true;
+        setMetrics(prev => ({ ...prev, status: "stopped" })); setSummaryStatus('loading');
+      } else { console.log("Stop cmd sent, but not running."); }
+    } else if (command === "start_capture") {
+        setLoading(true); setError(null); setCommandStatus(null);
+    } else { setLoading(true); }
+    ws.current.send(JSON.stringify({ command, ...payload }));
   };
+
+  // Calculate KPIs using useMemo
+  const tcpKPIs = useMemo(() => calculateThroughputKPIs(tcpHistory), [tcpHistory]);
+  const rtpKPIs = useMemo(() => calculateThroughputKPIs(rtpHistory), [rtpHistory]);
+  const udpKPIs = useMemo(() => calculateThroughputKPIs(udpHistory), [udpHistory]);
+  const quicKPIs = useMemo(() => calculateThroughputKPIs(quicHistory), [quicHistory]);
+  const ipv4KPIs = useMemo(() => calculateThroughputKPIs(ipv4History), [ipv4History]);
+  const ipv6KPIs = useMemo(() => calculateThroughputKPIs(ipv6History), [ipv6History]);
+  const dnsKPIs = useMemo(() => calculateThroughputKPIs(dnsHistory), [dnsHistory]);     // <-- Add DNS KPIs
+  const igmpKPIs = useMemo(() => calculateThroughputKPIs(igmpHistory), [igmpHistory]);  // <-- Add IGMP KPIs
 
   return {
     wsConnected, metrics, packets, commandStatus, loading, error, sendCommand, interfaces, metricsHistory, protocolDistribution,
-    // --- NEW: Export new states ---
+    // Protocol metrics
+    tcpMetrics, rtpMetrics, udpMetrics, quicMetrics, ipv4Metrics, ipv6Metrics, dnsMetrics, igmpMetrics, ipComposition, // <-- Updated exports
+    // Protocol throughput history and KPIs
+    tcpHistory, rtpHistory, udpHistory, quicHistory, ipv4History, ipv6History, dnsHistory, igmpHistory, // <-- Updated exports
+    tcpKPIs, rtpKPIs, udpKPIs, quicKPIs, ipv4KPIs, ipv6KPIs, dnsKPIs, igmpKPIs,                         // <-- Updated exports
+    // Full metrics history
+    tcpFullMetricsHistory, rtpFullMetricsHistory,
+    // AI Summary
     captureSummary, summaryStatus,
-    // --- End of NEW section ---
   };
 }

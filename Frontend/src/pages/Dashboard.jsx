@@ -1,31 +1,31 @@
-// Dashboard.jsx
-
-import { useState } from 'react';
+// Frontend/src/pages/Dashboard.jsx
+import { useState } from 'react'; // Removed useMemo
 import StatusBanner from "../components/StatusBanner";
 import MetricCards from "../components/MetricCards";
 import ControlPanel from "../components/ControlPanel";
 import MetricChart from "../components/MetricChart";
 import ProtocolPieChart from "../components/ProtocolPieChart";
-import SummaryModal from '../components/SummaryModal'; // Import the new modal
+import ProtocolBarChart from '../components/ProtocolBarChart';
+import SummaryModal from '../components/SummaryModal';
 
 export default function Dashboard({
   wsConnected,
-  metrics,
+  metrics, // This object now contains packets_per_second
   commandStatus,
   loading,
   error,
   sendCommand,
   interfaces,
-  metricsHistory,
+  metricsHistory, // Global throughput history
   protocolDistribution,
-  // --- NEW: Receive summary props ---
+  // Removed ipv4Metrics, ipv6Metrics as they are not needed here anymore
+  // AI Summary props
   captureSummary,
   summaryStatus,
-  // --- End of NEW section ---
 }) {
-  // --- NEW: State to control modal visibility ---
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
-  // --- End of NEW section ---
+
+  // totalPacketsPerSecond calculation removed
 
   return (
     <div>
@@ -35,46 +35,42 @@ export default function Dashboard({
         loading={loading}
         commandStatus={commandStatus}
         interfaces={interfaces}
-        // --- NEW: Pass summary props and handler to ControlPanel ---
         summaryStatus={summaryStatus}
         onShowSummary={() => setIsSummaryModalOpen(true)}
-        // --- End of NEW section ---
       />
+
+      {/* Row 1: Simplified Metric Cards - Pass the whole metrics object */}
       <MetricCards metrics={metrics} />
-      
+
+      {/* Row 2: Full Width Throughput Chart */}
+      <div className="mt-6 h-72">
+         <MetricChart
+            title="Overall Throughput"
+            unit=" Mbps"
+            data={metricsHistory}
+            lines={[
+              { dataKey: "inbound", name: "Inbound", color: "#2DD4BF" },
+              { dataKey: "outbound", name: "Outbound", color: "#3B82F6" }
+            ]}
+          />
+      </div>
+
+      {/* Row 3: Protocol Distribution Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-        <div className="lg:col-span-2">
-            <MetricChart
-              title="Throughput"
-              unit=" Mbps"
-              data={metricsHistory}
-              lines={[
-                { dataKey: "inbound", name: "Inbound", color: "#2DD4BF" },
-                { dataKey: "outbound", name: "Outbound", color: "#3B82F6" }
-              ]}
-            />
+        <div className="lg:col-span-1">
+            <ProtocolPieChart data={protocolDistribution} />
         </div>
-        <ProtocolPieChart data={protocolDistribution} />
-        <div className="lg:col-span-3">
-            <MetricChart
-              title="Latency & Jitter"
-              unit=" ms"
-              data={metricsHistory}
-              lines={[
-                { dataKey: "latency", name: "Latency", color: "#F472B6" },
-                { dataKey: "jitter", name: "Jitter", color: "#FBBF24" }
-              ]}
-            />
+        <div className="lg:col-span-2">
+             <ProtocolBarChart data={protocolDistribution} />
         </div>
       </div>
-      
-      {/* --- NEW: Render the modal and control it with state --- */}
-      <SummaryModal 
-        summary={captureSummary} 
+
+      {/* AI Summary Modal */}
+      <SummaryModal
+        summary={captureSummary}
         isOpen={isSummaryModalOpen}
-        onClose={() => setIsSummaryModalOpen(false)} 
+        onClose={() => setIsSummaryModalOpen(false)}
       />
-      {/* --- End of NEW section --- */}
     </div>
   );
 }
