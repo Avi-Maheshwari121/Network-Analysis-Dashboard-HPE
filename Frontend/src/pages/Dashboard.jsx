@@ -25,6 +25,9 @@ export default function Dashboard({
 }) {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
 
+  const isUiLocked = loading && summaryStatus !== 'done';
+
+
   // totalPacketsPerSecond calculation removed
 
   return (
@@ -67,7 +70,8 @@ export default function Dashboard({
 
       {/* AI Summary Modal */}
       <SummaryModal
-        summary={captureSummary}
+        summaryData={captureSummary}
+        isLoading={summaryStatus === 'loading'}
         isOpen={isSummaryModalOpen}
         onClose={() => setIsSummaryModalOpen(false)}
       />

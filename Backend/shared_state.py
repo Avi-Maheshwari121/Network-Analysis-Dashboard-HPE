@@ -146,3 +146,7 @@ ip_composition = {
     "ipv4_percentage": 0,
     "ipv6_percentage": 0
 }
+
+# History lists for statistical analysis
+tcp_metrics_history = []
+rtp_metrics_history = []
