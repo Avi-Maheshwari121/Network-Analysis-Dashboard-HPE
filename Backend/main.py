@@ -46,7 +46,7 @@ def main():
     print("Network Monitoring Dashboard - Backend")
     
     try:
-        shared_state.ip_address = capture_manager.get_device_ips()
+        capture_manager.get_device_ips()
         asyncio.run(start_websocket_server())
     except KeyboardInterrupt:
         print("\nApplication interrupted by user")

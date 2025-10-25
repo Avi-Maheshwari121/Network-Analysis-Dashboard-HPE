@@ -23,6 +23,8 @@ protocol_map = {
 def get_device_ips():
     """Get all IPv4 and IPv6 addresses from all network interfaces."""
     device_ips = []
+    ipv4_list = []
+    ipv6_list = []
     
     try:
         all_addrs = psutil.net_if_addrs()
@@ -31,18 +33,22 @@ def get_device_ips():
             for addr in addrs:
                 if addr.family == socket.AF_INET:  # IPv4
                     device_ips.append(addr.address)
+                    ipv4_list.append(addr.address)
                 elif addr.family == socket.AF_INET6:  # IPv6
                     ip6_without_zone = addr.address.split('%')[0]  # strip %zone
                     device_ips.append(ip6_without_zone)
+                    ipv6_list.append(ip6_without_zone)
         
         # Remove duplicates
         device_ips = list(set(device_ips))
-                
+        ipv4_list = list(set(ipv4_list))
+        ipv6_list = list(set(ipv6_list))
+
+        shared_state.ip_address = device_ips
+        shared_state.ipv4_ips = ipv4_list        
+        shared_state.ipv6_ips = ipv6_list        
     except Exception as e:
         print(f"Error getting device IPs: {e}")
-    
-    return device_ips
-
 
 
 def get_network_interfaces():
@@ -157,6 +163,123 @@ async def start_tshark(interface = "1"):
         return False, f"Error starting tshark: {e}"
 
 
+def resetSharedState():
+    shared_state.tshark_proc = None
+    shared_state.capture_active = False
+
+    shared_state.streams = {}
+    shared_state.all_packets_history = []
+    shared_state.session_metrics_history = []
+
+    shared_state.tcp_expected_packets_total = 0
+    shared_state.tcp_lost_packets_total = 0
+    shared_state.rtp_expected_packets_total = 0
+    shared_state.rtp_lost_packets_total = 0
+
+    shared_state.packets_Per_Second = 0
+
+    shared_state.protocol_distribution = {
+        "TCP": 0,
+        "UDP": 0,
+        "RTP": 0,
+        "TLSV": 0,
+        "QUIC": 0,
+        "DNS": 0,
+        "Others": 0
+    }
+    
+    shared_state.metrics_state.update({
+        "inbound_throughput": 0.0,
+        "outbound_throughput": 0.0,
+        "status": "stopped",
+        "last_update": None,
+        "protocol_distribution": shared_state.protocol_distribution,
+        "streamCount": 0,
+        "totalPackets": 0,
+        "packets_per_second": 0
+    })
+
+    shared_state.tcp_metrics = {
+        "inbound_packets": 0,
+        "outbound_packets": 0,
+        "packets_per_second": 0,
+        "packet_loss": 0,
+        "packet_loss_percentage": 0,
+        "inbound_throughput": 0,
+        "outbound_throughput": 0,
+        "latency": 0,
+    }
+
+    shared_state.rtp_metrics = {
+        "inbound_packets": 0,
+        "outbound_packets": 0,
+        "packets_per_second": 0,
+        "packet_loss": 0,
+        "packet_loss_percentage": 0,
+        "inbound_throughput": 0,
+        "outbound_throughput": 0,
+        "jitter": 0,
+    }
+
+    shared_state.udp_metrics = {
+        "inbound_packets": 0,
+        "outbound_packets": 0,
+        "packets_per_second": 0,
+        "inbound_throughput": 0,
+        "outbound_throughput": 0,
+    }
+
+    shared_state.quic_metrics = {
+        "inbound_packets": 0,
+        "outbound_packets": 0,
+        "packets_per_second": 0,
+        "inbound_throughput": 0,
+        "outbound_throughput": 0,
+    }
+
+    shared_state.dns_metrics = {
+        "inbound_packets": 0,
+        "outbound_packets": 0,
+        "packets_per_second": 0,
+        "inbound_throughput": 0,
+        "outbound_throughput": 0,
+    }
+
+    shared_state.igmp_metrics = {
+        "inbound_packets": 0,
+        "outbound_packets": 0,
+        "packets_per_second": 0,
+        "inbound_throughput": 0,
+        "outbound_throughput": 0,
+    }
+
+    shared_state.ipv4_metrics = {
+        "inbound_packets": 0,
+        "outbound_packets": 0,
+        "packets_per_second": 0,
+        "inbound_throughput": 0,
+        "outbound_throughput": 0,
+    }
+
+    shared_state.ipv6_metrics = {
+        "inbound_packets": 0,
+        "outbound_packets": 0,
+        "packets_per_second": 0,
+        "inbound_throughput": 0,
+        "outbound_throughput": 0,
+    }
+
+    shared_state.ip_composition = {
+        "ipv4_packets": 0,
+        "ipv6_packets": 0,
+        "ipv4_packets_cumulative": 0,
+        "ipv6_packets_cumulative": 0,
+        "total_packets": 0,
+        "ipv4_percentage": 0,
+        "ipv6_percentage": 0
+    }
+
+
 async def stop_tshark():
     """Stop tshark packet capture process"""
     if shared_state.tshark_proc:
@@ -167,7 +290,7 @@ async def stop_tshark():
             
             try:
                 shared_state.tshark_proc.terminate()
-                await asyncio.wait_for(shared_state.tshark_proc.wait(), timeout=3.0)
+                await asyncio.wait_for(shared_state.tshark_proc.wait(), timeout = 3.0)
                 print("Tshark terminated gracefully")
             except asyncio.TimeoutError:
                 print("Tshark didn't terminate, forcing kill...")
@@ -178,38 +301,7 @@ async def stop_tshark():
         except Exception as e:
             print(f"Error stopping tshark: {e}")
         finally:
-            shared_state.tshark_proc = None
-            shared_state.capture_active = False
-
-            shared_state.streams = {}
-            shared_state.all_packets_history = []
-            shared_state.session_metrics_history = []
-            shared_state.lost_packets_total = 0
-            shared_state.expected_packets_total = 0
-            shared_state.protocol_distribution = {
-                "TCP": 0,
-                "UDP": 0,
-                "RTP": 0,
-                "TLSV": 0,
-                "QUIC": 0,
-                "DNS": 0,
-                "Others": 0
-            }
-            
-            shared_state.metrics_state.update({
-                "inbound_throughput": 0.0,
-                "outbound_throughput": 0.0,
-                "latency": 0.0,
-                "jitter": 0.0,
-                "packet_loss_count": 0,
-                "packet_loss_percent": 0.0,
-                "status": "stopped",
-                "last_update": None,
-                "protocol_distribution": shared_state.protocol_distribution,
-                "streamCount": 0,
-                "totalPackets": 0
-            })
-            
+            resetSharedState()            
             print("Tshark stopped and state reset")
         return True, "Tshark stopped successfully"
     else:
@@ -248,7 +340,7 @@ def parse_and_store_packet(parts):
             "destination": dest_ip,
             "protocol": protocols,
             "length": length,
-            "info": info[:100] + "..." if len(info) > 100 else info # Truncate info
+            "info": info
         }
         return packet_data
     except Exception as e:
@@ -323,7 +415,7 @@ async def capture_packets(duration):
             elif "RTP" in proto.upper() and rtp_ssrc != "N/A":
                 key = ("rtp", rtp_ssrc)
             else:
-                key = ("other", "misc")
+                key = (proto.lower(), "misc")
 
             if key not in shared_state.streams:
                 shared_state.streams[key] = []
