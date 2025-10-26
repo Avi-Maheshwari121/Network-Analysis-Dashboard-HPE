@@ -178,6 +178,13 @@ def calculate_metrics():
             "ipv4_percentage": 0,
             "ipv6_percentage": 0
         })
+        shared_state.encryption_composition.update({
+            "total_packets": 0,
+            "encrypted_percentage": 0,
+            "unencrypted_percentage": 0,
+            "encrypted_packets": 0,
+            "unencrypted_packets": 0
+        })
 
     # Throughput calculation
     inbound_bytes = 0
@@ -284,6 +291,15 @@ def calculate_metrics():
         "ipv4_percentage": 0,
         "ipv6_percentage": 0
     }
+    encryption_temp_composition = {
+        "encrypted_packets": 0,
+        "unencrypted_packets": 0,
+        "encrypted_packets_cumulative": shared_state.encryption_composition.get("encrypted_packets_cumulative", 0),
+        "unencrypted_packets_cumulative": shared_state.encryption_composition.get("unencrypted_packets_cumulative", 0),
+        "total_packets": 0,
+        "encrypted_percentage": 0,
+        "unencrypted_percentage": 0
+    }
 
     # Iterate over all streams
     for (proto, stream_id), packet_list in shared_state.streams.items():
@@ -357,6 +373,19 @@ def calculate_metrics():
                         rtt_ms = rtt * 1000
                         stream_rtt_sum += rtt_ms
                         stream_rtt_count += 1
+                    
+                    #Encryption Check 
+                    protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
+                    is_encrypted = False
+                    # Define encrypted protocols 
+                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
+                        is_encrypted = True
+
+                    if is_encrypted:
+                        encryption_temp_composition["encrypted_packets"] += 1
+                    else:
+                        encryption_temp_composition["unencrypted_packets"] += 1
 
                 except (ValueError, IndexError):
                     continue
@@ -502,6 +531,19 @@ def calculate_metrics():
                                 jitter_state['jitter'] = jitter_state['jitter'] + (d - jitter_state['jitter']) / 16
                             
                             jitter_state['prev_transit'] = transit
+
+                         #Encryption Check 
+                    protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
+                    is_encrypted = False
+                    # Define encrypted protocols 
+                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
+                        is_encrypted = True
+
+                    if is_encrypted:
+                        encryption_temp_composition["encrypted_packets"] += 1
+                    else:
+                        encryption_temp_composition["unencrypted_packets"] += 1
                         
                 except (ValueError, IndexError):
                     continue
@@ -563,6 +605,19 @@ def calculate_metrics():
                     protocol_category = get_protocol_category(protocol_name)
                     shared_state.protocol_distribution[protocol_category] = shared_state.protocol_distribution.get(protocol_category, 0) + 1
 
+                 # Encryption Check 
+                    protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
+                    is_encrypted = False
+                    # Define encrypted protocols 
+                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
+                        is_encrypted = True
+
+                    if is_encrypted:
+                        encryption_temp_composition["encrypted_packets"] += 1
+                    else:
+                        encryption_temp_composition["unencrypted_packets"] += 1
+
                 except (ValueError, IndexError):
                     continue
 
@@ -610,6 +665,19 @@ def calculate_metrics():
                     protocol_name = pkt[5] if pkt[5] else "N/A"
                     protocol_category = get_protocol_category(protocol_name)
                     shared_state.protocol_distribution[protocol_category] = shared_state.protocol_distribution.get(protocol_category, 0) + 1
+
+                 # Encryption Check 
+                    protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
+                    is_encrypted = False
+                    # Define encrypted protocols 
+                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
+                        is_encrypted = True
+
+                    if is_encrypted:
+                        encryption_temp_composition["encrypted_packets"] += 1
+                    else:
+                        encryption_temp_composition["unencrypted_packets"] += 1
 
                 except (ValueError, IndexError):
                     continue
@@ -659,6 +727,19 @@ def calculate_metrics():
                     protocol_category = get_protocol_category(protocol_name)
                     shared_state.protocol_distribution[protocol_category] = shared_state.protocol_distribution.get(protocol_category, 0) + 1
 
+                 # Encryption Check 
+                    protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
+                    is_encrypted = False
+                    # Define encrypted protocols 
+                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
+                        is_encrypted = True
+
+                    if is_encrypted:
+                        encryption_temp_composition["encrypted_packets"] += 1
+                    else:
+                        encryption_temp_composition["unencrypted_packets"] += 1
+
                 except (ValueError, IndexError):
                     continue
 
@@ -707,6 +788,19 @@ def calculate_metrics():
                     protocol_category = get_protocol_category(protocol_name)
                     shared_state.protocol_distribution[protocol_category] = shared_state.protocol_distribution.get(protocol_category, 0) + 1
 
+                 # Encryption Check 
+                    protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
+                    is_encrypted = False
+                    # Define encrypted protocols 
+                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
+                        is_encrypted = True
+
+                    if is_encrypted:
+                        encryption_temp_composition["encrypted_packets"] += 1
+                    else:
+                        encryption_temp_composition["unencrypted_packets"] += 1
+
                 except (ValueError, IndexError):
                     continue
 
@@ -747,6 +841,19 @@ def calculate_metrics():
                     protocol_name = pkt[5] if pkt[5] else "N/A"
                     protocol_category = get_protocol_category(protocol_name)
                     shared_state.protocol_distribution[protocol_category] = shared_state.protocol_distribution.get(protocol_category, 0) + 1
+
+                 # Encryption Check 
+                    protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
+                    is_encrypted = False
+                    # Define encrypted protocols 
+                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
+                        is_encrypted = True
+
+                    if is_encrypted:
+                        encryption_temp_composition["encrypted_packets"] += 1
+                    else:
+                        encryption_temp_composition["unencrypted_packets"] += 1
 
                 except (ValueError, IndexError):
                     continue
@@ -825,6 +932,19 @@ def calculate_metrics():
     ip_temp_composition["ipv4_packets_cumulative"] += ip_temp_composition["ipv4_packets"]
     ip_temp_composition["ipv6_packets_cumulative"] += ip_temp_composition["ipv6_packets"]
 
+    # After processing all streams/packets, adding the finalize stats
+    total_batch_packets = encryption_temp_composition["encrypted_packets"] + encryption_temp_composition["unencrypted_packets"]
+    encryption_temp_composition["total_packets"] = total_batch_packets
+
+    if total_batch_packets > 0:
+        encryption_temp_composition["encrypted_percentage"] = (encryption_temp_composition["encrypted_packets"] * 100) / total_batch_packets
+        encryption_temp_composition["unencrypted_percentage"] = (encryption_temp_composition["unencrypted_packets"] * 100) / total_batch_packets
+
+    # Update cumulative counts
+    encryption_temp_composition["encrypted_packets_cumulative"] += encryption_temp_composition["encrypted_packets"]
+    encryption_temp_composition["unencrypted_packets_cumulative"] += encryption_temp_composition["unencrypted_packets"]
+
+
     # Update metrics
     shared_state.metrics_state.update({
         "inbound_throughput": in_throughput,
@@ -846,6 +966,45 @@ def calculate_metrics():
     shared_state.quic_metrics = quic_temp_metrics
     shared_state.dns_metrics = dns_temp_metrics
     shared_state.igmp_metrics = igmp_temp_metrics
+    shared_state.encryption_composition = encryption_temp_composition  
+
+    # Append a snapshot of the current metrics to the history lists for session analysis.
+    # This is where the historical data for the LLM summarizer is collected.
+
+    # Overall session metrics
+    shared_state.session_metrics_history.append(shared_state.metrics_state.copy())
+
+    # TCP: Store latency and throughput
+    shared_state.tcp_metrics_history.append({
+        'latency': shared_state.tcp_metrics['latency'],
+        'inbound_throughput': shared_state.tcp_metrics['inbound_throughput'],
+        'outbound_throughput': shared_state.tcp_metrics['outbound_throughput']
+    })
+
+    # RTP: Store jitter and throughput
+    shared_state.rtp_metrics_history.append({
+        'jitter': shared_state.rtp_metrics['jitter'],
+        'inbound_throughput': shared_state.rtp_metrics['inbound_throughput'],
+        'outbound_throughput': shared_state.rtp_metrics['outbound_throughput']
+    })
+
+    # Other protocols: Store only their throughput for the history
+    shared_state.udp_metrics_history.append({
+        'inbound_throughput': shared_state.udp_metrics['inbound_throughput'],
+        'outbound_throughput': shared_state.udp_metrics['outbound_throughput']
+    })
+    shared_state.quic_metrics_history.append({
+        'inbound_throughput': shared_state.quic_metrics['inbound_throughput'],
+        'outbound_throughput': shared_state.quic_metrics['outbound_throughput']
+    })
+    shared_state.dns_metrics_history.append({
+        'inbound_throughput': shared_state.dns_metrics['inbound_throughput'],
+        'outbound_throughput': shared_state.dns_metrics['outbound_throughput']
+    })
+    shared_state.igmp_metrics_history.append({
+        'inbound_throughput': shared_state.igmp_metrics['inbound_throughput'],
+        'outbound_throughput': shared_state.igmp_metrics['outbound_throughput']
+    })
 
     timing_end = time.perf_counter()  # ← Different name for timing, for checking purpose
     print(f"Metrics calculation took: {(timing_end - timing_start) * 1000:.2f}ms")
@@ -856,4 +1015,3 @@ def calculate_metrics():
 def update_metrics_status(status):
     """Update the status in metrics state"""
     shared_state.metrics_state["status"] = status
-

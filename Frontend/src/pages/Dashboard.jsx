@@ -1,5 +1,5 @@
 // Frontend/src/pages/Dashboard.jsx
-import { useState } from 'react'; // Removed useMemo
+import { useState, useEffect, useRef } from 'react';
 import StatusBanner from "../components/StatusBanner";
 import MetricCards from "../components/MetricCards";
 import ControlPanel from "../components/ControlPanel";
@@ -25,11 +25,50 @@ export default function Dashboard({
 }) {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
 
+  const isUiLocked = loading && summaryStatus !== 'done';
+
+// --- ADD THIS NEW, CORRECTED LOGIC ---
+
+  const [captureDuration, setCaptureDuration] = useState(0);
+  // useRef to store the exact start time, unaffected by re-renders.
+  const startTimeRef = useRef(null);
+
+
+  useEffect(() => {
+    let intervalId = null;
+
+    if (metrics?.status === 'running') {
+      // Look for a start time in the browser's session storage.
+      let startTime = sessionStorage.getItem('captureStartTime');
+
+      // If one doesn't exist, this is a new capture. Create it.
+      if (!startTime) {
+        startTime = Date.now();
+        sessionStorage.setItem('captureStartTime', startTime);
+      }
+
+      // Update the timer every second based on the stored start time.
+      intervalId = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setCaptureDuration(elapsed >= 0 ? elapsed : 0);
+      }, 1000);
+
+    } else {
+      // When capture stops, clear the start time from storage.
+      sessionStorage.removeItem('captureStartTime');
+    }
+
+    // Stop the timer when the component updates or unmounts.
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [metrics]);
+// ---------------------------------------------
   // totalPacketsPerSecond calculation removed
 
   return (
     <div>
-      <StatusBanner connected={wsConnected} error={error} metrics={metrics} />
+      <StatusBanner connected={wsConnected} error={error} metrics={metrics} captureDuration={captureDuration} />
       <ControlPanel
         sendCommand={sendCommand}
         loading={loading}
@@ -37,6 +76,7 @@ export default function Dashboard({
         interfaces={interfaces}
         summaryStatus={summaryStatus}
         onShowSummary={() => setIsSummaryModalOpen(true)}
+        captureDuration={captureDuration}
       />
 
       {/* Row 1: Simplified Metric Cards - Pass the whole metrics object */}
@@ -67,7 +107,8 @@ export default function Dashboard({
 
       {/* AI Summary Modal */}
       <SummaryModal
-        summary={captureSummary}
+        summaryData={captureSummary}
+        isLoading={summaryStatus === 'loading'}
         isOpen={isSummaryModalOpen}
         onClose={() => setIsSummaryModalOpen(false)}
       />

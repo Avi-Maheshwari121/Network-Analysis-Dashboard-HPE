@@ -50,7 +50,8 @@ async def data_collection_loop():
                 "igmp_metrics": shared_state.igmp_metrics,
                 "ipv4_metrics": shared_state.ipv4_metrics,
                 "ipv6_metrics": shared_state.ipv6_metrics,
-                "ip_composition": shared_state.ip_composition
+                "ip_composition": shared_state.ip_composition,
+                "encryption_composition": shared_state.encryption_composition
             }
             try:
                 await client.send(json.dumps(data_to_send))
@@ -81,6 +82,12 @@ async def handle_command(command, data):
         return {"type": "command_response", "command": "start_capture", "success": success, "message": msg}
     
     elif command == "stop_capture":
+        final_duration = data.get("duration") 
+        if final_duration is not None:
+            # If it exists, save the accurate value to the shared state
+            shared_state.session_duration_final = int(final_duration)
+            print(f"Received accurate duration from frontend: {shared_state.session_duration_final}s")
+
         should_summarize = shared_state.capture_active and bool(shared_state.session_metrics_history)
         
         summary = None
@@ -138,7 +145,8 @@ async def websocket_handler(websocket):
             "igmp_metrics": shared_state.igmp_metrics,
             "ipv4_metrics": shared_state.ipv4_metrics,
             "ipv6_metrics": shared_state.ipv6_metrics,
-            "ip_composition": shared_state.ip_composition
+            "ip_composition": shared_state.ip_composition,
+            "encryption_composition": shared_state.encryption_composition
         }
         await websocket.send(json.dumps(initial_data))
 
