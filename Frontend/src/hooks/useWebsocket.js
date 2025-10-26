@@ -53,6 +53,7 @@ export default function useWebSocket(url) {
   const [dnsMetrics, setDnsMetrics] = useState(null);   // <-- Added DNS
   const [igmpMetrics, setIgmpMetrics] = useState(null); // <-- Added IGMP
   const [ipComposition, setIpComposition] = useState(null); // Includes cumulative now
+  const [encryptionComposition, setEncryptionComposition] = useState(null); // Encryption composition state
 
   // --- State for Protocol Specific Throughput History ---
   const [tcpHistory, setTcpHistory] = useState([]);
@@ -140,6 +141,7 @@ export default function useWebSocket(url) {
              setDnsMetrics(msg.dns_metrics || null);     // <-- Reset DNS
              setIgmpMetrics(msg.igmp_metrics || null);   // <-- Reset IGMP
              setIpComposition(msg.ip_composition || null);
+             setEncryptionComposition(msg.encryption_composition || null);  //Encryption State reset
              setTcpHistory([]); setRtpHistory([]); setUdpHistory([]);
              setQuicHistory([]); setIpv4History([]); setIpv6History([]);
              setDnsHistory([]); setIgmpHistory([]);      // <-- Reset DNS/IGMP History
@@ -169,6 +171,7 @@ export default function useWebSocket(url) {
             setDnsMetrics(msg.dns_metrics);     // <-- Update DNS
             setIgmpMetrics(msg.igmp_metrics);   // <-- Update IGMP
             setIpComposition(msg.ip_composition);
+            setEncryptionComposition(msg.encryption_composition); // Update Encryption Composition
 
             // Update global metrics history
             if (msg.metrics) {
@@ -240,7 +243,7 @@ export default function useWebSocket(url) {
               setTcpMetrics(null); setRtpMetrics(null); setUdpMetrics(null);
               setQuicMetrics(null); setIpv4Metrics(null); setIpv6Metrics(null);
               setDnsMetrics(null); setIgmpMetrics(null); // <-- Reset DNS/IGMP
-              setIpComposition(null); setTcpHistory([]); setRtpHistory([]);
+              setIpComposition(null); setEncryptionComposition(null);setTcpHistory([]); setRtpHistory([]);
               setUdpHistory([]); setQuicHistory([]); setIpv4History([]);
               setIpv6History([]); setDnsHistory([]); setIgmpHistory([]); // <-- Reset DNS/IGMP History
               setTcpFullMetricsHistory([]); setRtpFullMetricsHistory([]);
@@ -317,5 +320,7 @@ export default function useWebSocket(url) {
     tcpFullMetricsHistory, rtpFullMetricsHistory,
     // AI Summary
     captureSummary, summaryStatus,
+    //Encryption Export
+    encryptionComposition,
   };
 }

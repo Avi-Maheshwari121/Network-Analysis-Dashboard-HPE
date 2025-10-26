@@ -3,6 +3,7 @@ import React from 'react';
 import StatusBanner from '../components/StatusBanner';
 import ProtocolMetricsDisplay from '../components/ProtocolMetricsDisplay'; // Reusable component for IPv4/IPv6 display
 import IpCompositionPieChart from '../components/IpCompositionPieChart'; // Use the cumulative pie chart
+import EncryptionCompositionPieChart from '../components/EncryptionCompositionPieChart'; // New Encryption Pie Chart Component
 
 // Simple StatCard component for reuse within this page only
 const StatCard = ({ title, value, unit = '', subValue = '' }) => (
@@ -25,6 +26,7 @@ function TrafficCompositionPage({
   ipv6History,
   ipv4KPIs,
   ipv6KPIs,
+  encryptionComposition,
 }) {
 
   // Configuration for IP versions display
@@ -54,7 +56,7 @@ function TrafficCompositionPage({
 
       {/* Display IP Composition Section (using cumulative data) */}
       {ipComposition && (
-        <div className="bg-surface-dark p-6 rounded-xl border border-border-dark shadow-md">
+        <div className="bg-surface-dark p-6 rounded-xl border border-border-dark shadow-md mb-6">
           <h3 className="text-xl font-bold text-primary-accent mb-4">Cumulative IP Composition</h3>
           {/* Grid for Cards and Pie Chart */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
@@ -69,6 +71,36 @@ function TrafficCompositionPage({
             <div className="md:col-span-1">
               {/* Pass the updated ipComposition object */}
               <IpCompositionPieChart data={ipComposition} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*Encryption Composition Section */}
+      {encryptionComposition && (
+        <div className="bg-surface-dark p-6 rounded-xl border border-border-dark shadow-md">
+          <h3 className="text-xl font-bold text-primary-accent mb-4">Cumulative Encryption Composition</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+            {/* Column 1 & 2: Stat Cards using cumulative encryption data */}
+            <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+               <StatCard
+                 title="Total Packets (Session)"
+                 value={encryptionComposition.encrypted_packets_cumulative + encryptionComposition.unencrypted_packets_cumulative || 0}
+               />
+               <StatCard
+                 title="Encrypted Packets (Session)"
+                 value={`${encryptionComposition.encrypted_packets_cumulative || 0}`}
+                 subValue={`(${(encryptionComposition.encrypted_percentage || 0).toFixed(1)}%)`} // Use overall percentage if available, otherwise calc
+               />
+               <StatCard
+                 title="Unencrypted Packets (Session)"
+                 value={`${encryptionComposition.unencrypted_packets_cumulative || 0}`}
+                 subValue={`(${(encryptionComposition.unencrypted_percentage || 0).toFixed(1)}%)`} // Use overall percentage if available, otherwise calc
+               />
+            </div>
+            {/* Column 3: Pie Chart */}
+            <div className="md:col-span-1">
+              <EncryptionCompositionPieChart data={encryptionComposition} />
             </div>
           </div>
         </div>

@@ -59,6 +59,7 @@
      // AI Summary states
      captureSummary,
      summaryStatus,
+     encryptionComposition, // Encryption Composition State
    } = useWebSocket(WEBSOCKET_URL);
 
    return (
@@ -110,6 +111,7 @@
               ipv6History={ipv6History}
               ipv4KPIs={ipv4KPIs}
               ipv6KPIs={ipv6KPIs}
+              encryptionComposition={encryptionComposition}  //Pass encryption data 
             />
          ) : null}
        </main>

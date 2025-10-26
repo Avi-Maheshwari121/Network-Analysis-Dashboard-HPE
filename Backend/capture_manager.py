@@ -278,7 +278,15 @@ def resetSharedState():
         "ipv4_percentage": 0,
         "ipv6_percentage": 0
     }
-
+    shared_state.encryption_composition = {
+        "encrypted_packets": 0,
+        "unencrypted_packets": 0,
+        "encrypted_packets_cumulative": 0,
+        "unencrypted_packets_cumulative": 0,
+        "total_packets": 0,
+        "encrypted_percentage": 0,
+        "unencrypted_percentage": 0
+    }
 
 async def stop_tshark():
     """Stop tshark packet capture process"""
