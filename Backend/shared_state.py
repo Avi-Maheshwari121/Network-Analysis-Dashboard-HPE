@@ -33,6 +33,8 @@ protocol_distribution = {
 metrics_state = {
     "inbound_throughput": 0.0,
     "outbound_throughput": 0.0,
+    "inbound_goodput": 0.0,      
+    "outbound_goodput": 0.0,
     "status": "stopped",
     "last_update": None,
     "protocol_distribution": protocol_distribution,

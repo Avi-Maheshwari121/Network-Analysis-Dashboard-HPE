@@ -120,6 +120,8 @@ async def start_tshark(interface = "1"):
             "-e", "rtp.timestamp",
             "-e", "rtp.p_type",
             "-e", "ipv6.nxt",
+            "-e", "tcp.len",        
+            "-e", "udp.length",
             "-E", "separator=|",
             "-E", "occurrence=f",
             "-E", "header=n",
@@ -191,6 +193,8 @@ def resetSharedState():
     shared_state.metrics_state.update({
         "inbound_throughput": 0.0,
         "outbound_throughput": 0.0,
+        "inbound_goodput": 0.0,      
+        "outbound_goodput": 0.0,
         "status": "stopped",
         "last_update": None,
         "protocol_distribution": shared_state.protocol_distribution,
@@ -406,12 +410,12 @@ async def capture_packets(duration):
                 shared_state.all_packets_history.append(formatted_packet)
                 new_packets_count += 1
 
-            ip_proto = parts[15] if len(parts) > 15 else "N/A"
-            proto = parts[5] if len(parts) > 5 else "N/A"
-            tcp_stream = parts[7] if len(parts) > 7 else "N/A"
-            udp_stream = parts[8] if len(parts) > 8 else "N/A"
-            rtp_ssrc = parts[13] if len(parts) > 13 else "N/A"
-            proto_temp = parts[20] if len(parts) > 20 else "N/A"
+            ip_proto = parts[15] if parts[15] else "N/A"
+            proto = parts[5] if parts[5] else "N/A"
+            tcp_stream = parts[7] if parts[7] else "N/A"
+            udp_stream = parts[8] if parts[8] else "N/A"
+            rtp_ssrc = parts[13] if parts[13] else "N/A"
+            proto_temp = parts[20] if parts[20] else "N/A"
 
             proto_name = protocol_map.get(ip_proto, None)
             proto_temp = protocol_map.get(proto_temp, None)
