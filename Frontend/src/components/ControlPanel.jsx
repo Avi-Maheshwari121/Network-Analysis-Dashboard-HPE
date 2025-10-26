@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, LoaderCircle } from 'lucide-react'; // Import icons
 
-export default function ControlPanel({ sendCommand, loading, commandStatus, interfaces, summaryStatus, onShowSummary }) {
+export default function ControlPanel({ sendCommand, loading, commandStatus, interfaces, summaryStatus, onShowSummary, captureDuration }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedInterface, setSelectedInterface] = useState(null);
 
@@ -65,7 +65,7 @@ export default function ControlPanel({ sendCommand, loading, commandStatus, inte
     <>
       <div className="flex items-center gap-4 mb-6">
         <Button onClick={() => setIsModalOpen(true)}>Start Capture</Button>
-        <Button onClick={() => sendCommand("stop_capture")}>Stop Capture</Button>
+        <Button onClick={() => sendCommand("stop_capture", { duration: captureDuration })}>Stop Capture</Button>
         <AISummaryButton />
         <div className="flex-grow" />
         {commandStatus && (

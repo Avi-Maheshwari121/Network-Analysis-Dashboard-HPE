@@ -147,6 +147,21 @@ ip_composition = {
     "ipv6_percentage": 0
 }
 
+# Encryption Composition
+encryption_composition = {
+    "encrypted_packets": 0,
+    "unencrypted_packets": 0,
+    "encrypted_packets_cumulative": 0,
+    "unencrypted_packets_cumulative": 0,
+    "total_packets": 0,         
+    "encrypted_percentage": 0,
+    "unencrypted_percentage": 0
+}
+
 # History lists for statistical analysis
 tcp_metrics_history = []
 rtp_metrics_history = []
+udp_metrics_history = []
+quic_metrics_history = []
+dns_metrics_history = []
+igmp_metrics_history = []
