@@ -3,6 +3,16 @@
 from datetime import datetime 
 import shared_state
 
+# Protocol header sizes (bytes) for goodput calculation
+HEADER_SIZES = {
+    'ethernet': 14,
+    'ipv4': 20,
+    'ipv6': 40,
+    'tcp': 20,  # minimum, can be larger with options
+    'udp': 8,
+    'rtp': 12
+}
+
 # Static payload type to clock rate mapping 
 STATIC_PAYLOAD_RATES = {
     0: 8000,     # PCMU (G.711 μ-law)
@@ -96,6 +106,8 @@ def calculate_metrics():
         shared_state.metrics_state.update({
             "inbound_throughput": 0.0,
             "outbound_throughput": 0.0,
+            "inbound_goodput": 0.0,      
+            "outbound_goodput": 0.0,
             "last_update": datetime.now().isoformat(),
             "protocol_distribution": shared_state.protocol_distribution,
             "streamCount": 0,
@@ -190,6 +202,10 @@ def calculate_metrics():
     inbound_bytes = 0
     outbound_bytes = 0
     start_time, end_time = float("inf"), 0 # float("inf") = positive infinity
+
+    # Goodput calculation (application-level throughput)
+    inbound_goodput_bytes = 0
+    outbound_goodput_bytes = 0
 
     # Packet Loss percentage and count
     total_rtp_loss = 0
@@ -329,12 +345,15 @@ def calculate_metrics():
                         total_tcp_retransmissions += 1
 
 
-                    # Throughput
+                    # Throughput and Goodput
                     time_rel = float(pkt[1]) if pkt[1] else -1 
                     length = int(pkt[4]) if pkt[4] else 0
 
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
+
+                    payload_len_str = pkt[21] if pkt[21] else "0" # tcp.len
+                    payload_len = int(payload_len_str) if payload_len_str else 0
 
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
@@ -342,24 +361,32 @@ def calculate_metrics():
                         tcp_temp_metrics["outbound_throughput"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
                         ipv4_temp_metrics["outbound_throughput"] += length
+                        if not ((retrans != "0" or fast_retrans != "0") and spurious == "0"):
+                            outbound_goodput_bytes += payload_len
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         tcp_temp_metrics["outbound_packets"] += 1
                         tcp_temp_metrics["outbound_throughput"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
                         ipv6_temp_metrics["outbound_throughput"] += length
+                        if not ((retrans != "0" or fast_retrans != "0") and spurious == "0"):
+                            outbound_goodput_bytes += payload_len
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         tcp_temp_metrics["inbound_packets"] += 1
                         tcp_temp_metrics["inbound_throughput"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
                         ipv4_temp_metrics["inbound_throughput"] += length
+                        if not ((retrans != "0" or fast_retrans != "0") and spurious == "0"):
+                            inbound_goodput_bytes += payload_len
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         tcp_temp_metrics["inbound_packets"] += 1
                         tcp_temp_metrics["inbound_throughput"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
                         ipv6_temp_metrics["inbound_throughput"] += length
+                        if not ((retrans != "0" or fast_retrans != "0") and spurious == "0"):
+                            inbound_goodput_bytes += payload_len
                     
                     if time_rel >= 0:
                         start_time = min(start_time, time_rel)
@@ -444,30 +471,37 @@ def calculate_metrics():
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
 
+                    payload_len_str = pkt[22] if pkt[22] else "0" # udp.length
+                    payload_len = int(payload_len_str) if payload_len_str else 0
+
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         rtp_temp_metrics["outbound_packets"] += 1
                         rtp_temp_metrics["outbound_throughput"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
                         ipv4_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"] - HEADER_SIZES["rtp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         rtp_temp_metrics["outbound_packets"] += 1
                         rtp_temp_metrics["outbound_throughput"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
                         ipv6_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"] - HEADER_SIZES["rtp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         rtp_temp_metrics["inbound_packets"] += 1
                         rtp_temp_metrics["inbound_throughput"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
                         ipv4_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"] - HEADER_SIZES["rtp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         rtp_temp_metrics["inbound_packets"] += 1
                         rtp_temp_metrics["inbound_throughput"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
                         ipv6_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"] - HEADER_SIZES["rtp"])
                     
                     if time_rel > 0:
                         start_time = min(start_time, time_rel)
@@ -571,30 +605,37 @@ def calculate_metrics():
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
 
+                    payload_len_str = pkt[22] if pkt[22] else "0"
+                    payload_len = int(payload_len_str) if payload_len_str else 0
+
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         udp_temp_metrics["outbound_packets"] += 1
                         udp_temp_metrics["outbound_throughput"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
                         ipv4_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         udp_temp_metrics["outbound_packets"] += 1
                         udp_temp_metrics["outbound_throughput"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
                         ipv6_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         udp_temp_metrics["inbound_packets"] += 1
                         udp_temp_metrics["inbound_throughput"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
                         ipv4_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         udp_temp_metrics["inbound_packets"] += 1
                         udp_temp_metrics["inbound_throughput"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
                         ipv6_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     
                     if time_rel > 0:
                         start_time = min(start_time, time_rel)
@@ -632,30 +673,37 @@ def calculate_metrics():
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
 
+                    payload_len_str = pkt[22] if pkt[22] else "0"
+                    payload_len = int(payload_len_str) if payload_len_str else 0
+
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         quic_temp_metrics["outbound_packets"] += 1
                         quic_temp_metrics["outbound_throughput"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
                         ipv4_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         quic_temp_metrics["outbound_packets"] += 1
                         quic_temp_metrics["outbound_throughput"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
                         ipv6_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         quic_temp_metrics["inbound_packets"] += 1
                         quic_temp_metrics["inbound_throughput"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
                         ipv4_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         quic_temp_metrics["inbound_packets"] += 1
                         quic_temp_metrics["inbound_throughput"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
                         ipv6_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     
                     if time_rel > 0:
                         start_time = min(start_time, time_rel)
@@ -693,30 +741,37 @@ def calculate_metrics():
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
 
+                    payload_len_str = pkt[22] if pkt[22] else "0"
+                    payload_len = int(payload_len_str) if payload_len_str else 0
+
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         dns_temp_metrics["outbound_packets"] += 1
                         dns_temp_metrics["outbound_throughput"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
                         ipv4_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         dns_temp_metrics["outbound_packets"] += 1
                         dns_temp_metrics["outbound_throughput"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
                         ipv6_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         dns_temp_metrics["inbound_packets"] += 1
                         dns_temp_metrics["inbound_throughput"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
                         ipv4_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         dns_temp_metrics["inbound_packets"] += 1
                         dns_temp_metrics["inbound_throughput"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
                         ipv6_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     
                     if time_rel > 0:
                         start_time = min(start_time, time_rel)
@@ -754,30 +809,37 @@ def calculate_metrics():
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
 
+                    payload_len_str = pkt[22] if pkt[22] else "0"
+                    payload_len = int(payload_len_str) if payload_len_str else 0
+
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         igmp_temp_metrics["outbound_packets"] += 1
                         igmp_temp_metrics["outbound_throughput"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
                         ipv4_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         igmp_temp_metrics["outbound_packets"] += 1
                         igmp_temp_metrics["outbound_throughput"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
                         ipv6_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         igmp_temp_metrics["inbound_packets"] += 1
                         igmp_temp_metrics["inbound_throughput"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
                         ipv4_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         igmp_temp_metrics["inbound_packets"] += 1
                         igmp_temp_metrics["inbound_throughput"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
                         ipv6_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     
                     if time_rel > 0:
                         start_time = min(start_time, time_rel)
@@ -820,18 +882,22 @@ def calculate_metrics():
                         outbound_bytes += length
                         ipv4_temp_metrics["outbound_packets"] += 1
                         ipv4_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (length - HEADER_SIZES["ipv4"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         ipv6_temp_metrics["outbound_packets"] += 1
                         ipv6_temp_metrics["outbound_throughput"] += length
+                        outbound_goodput_bytes += (length - HEADER_SIZES["ipv6"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         ipv4_temp_metrics["inbound_packets"] += 1
                         ipv4_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (length - HEADER_SIZES["ipv4"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         ipv6_temp_metrics["inbound_packets"] += 1
                         ipv6_temp_metrics["inbound_throughput"] += length
+                        inbound_goodput_bytes += (length - HEADER_SIZES["ipv6"])
                     
                     if time_rel > 0:
                         start_time = min(start_time, time_rel)
@@ -863,9 +929,12 @@ def calculate_metrics():
     # Throughput
     duration = max(end_time - start_time, 1e-6) if start_time != float("inf") else 1e-6
     duration = max(duration, shared_state.capture_duration) 
-
     in_throughput = ((inbound_bytes * 8) / duration) / 1000000 # Mbps
     out_throughput = ((outbound_bytes * 8) / duration) / 1000000
+
+    # Goodput
+    in_goodput = ((inbound_goodput_bytes * 8) / duration) / 1000000  # Mbps
+    out_goodput = ((outbound_goodput_bytes * 8) / duration) / 1000000  # Mbps
 
     # TCP Data
     tcp_temp_metrics["packets_per_second"] = expected_tcp_packets / duration
@@ -949,6 +1018,8 @@ def calculate_metrics():
     shared_state.metrics_state.update({
         "inbound_throughput": in_throughput,
         "outbound_throughput": out_throughput,
+        "inbound_goodput": in_goodput,
+        "outbound_goodput": out_goodput,
         "last_update": datetime.now().isoformat(),
         "protocol_distribution": shared_state.protocol_distribution,
         "streamCount": streams_count,
