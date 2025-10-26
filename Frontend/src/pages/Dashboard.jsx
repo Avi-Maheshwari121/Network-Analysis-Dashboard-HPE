@@ -32,39 +32,43 @@ export default function Dashboard({
   const [captureDuration, setCaptureDuration] = useState(0);
   // useRef to store the exact start time, unaffected by re-renders.
   const startTimeRef = useRef(null);
-
-
+  
   useEffect(() => {
     let intervalId = null;
 
+    // A. Logic for when CAPTURE IS RUNNING
     if (metrics?.status === 'running') {
-      // Look for a start time in the browser's session storage.
+      sessionStorage.removeItem('finalCaptureDuration'); // Clear any previous final time
       let startTime = sessionStorage.getItem('captureStartTime');
-
-      // If one doesn't exist, this is a new capture. Create it.
       if (!startTime) {
         startTime = Date.now();
         sessionStorage.setItem('captureStartTime', startTime);
       }
 
-      // Update the timer every second based on the stored start time.
       intervalId = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
         setCaptureDuration(elapsed >= 0 ? elapsed : 0);
       }, 1000);
 
+    // B. Logic for when CAPTURE IS STOPPED
     } else {
-      // When capture stops, clear the start time from storage.
+      const finalDuration = sessionStorage.getItem('finalCaptureDuration');
+      // If a final duration is stored, display it.
+      if (finalDuration) {
+        setCaptureDuration(parseInt(finalDuration, 10));
+      } else {
+        // Otherwise, save the current timer value as the final duration.
+        sessionStorage.setItem('finalCaptureDuration', captureDuration);
+      }
+      // Clear the start time so the next capture is fresh.
       sessionStorage.removeItem('captureStartTime');
     }
 
-    // Stop the timer when the component updates or unmounts.
+    // C. Cleanup Function
     return () => {
       clearInterval(intervalId);
     };
   }, [metrics]);
-// ---------------------------------------------
-  // totalPacketsPerSecond calculation removed
 
   return (
     <div>
