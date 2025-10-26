@@ -1,5 +1,58 @@
 import React from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { X } from 'lucide-react';
+
+function PacketDetailModal({ packet, isOpen, onClose }) {
+  if (!isOpen || !packet) return null;
+
+  const fields = [
+    { label: 'Packet No.', value: packet.no },
+    { label: 'Time', value: packet.time },
+    { label: 'Source IP', value: packet.source },
+    { label: 'Destination IP', value: packet.destination },
+    { label: 'Protocol', value: packet.protocol },
+    { label: 'Length', value: packet.length },
+    { label: 'Info', value: packet.info },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[9999]">
+      <div className="bg-surface-dark p-6 rounded-lg shadow-lg w-full max-w-md border border-border-dark max-h-[75vh] flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-primary-accent">Packet Details</h2>
+          <button
+            onClick={onClose}
+            className="text-text-secondary hover:text-text-main transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="space-y-4 overflow-y-auto pr-2 flex-1" style={{ scrollbarWidth: 'thin', scrollbarColor: '#30363D #0D1117' }}>
+          {fields.map((field, idx) => (
+            <div key={idx} className="border-b border-border-dark pb-3 last:border-b-0">
+              <p className="text-xs font-semibold text-text-secondary uppercase mb-1">
+                {field.label}
+              </p>
+              <p className="text-text-main break-words font-mono text-sm">
+                {field.value}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end mt-6 pt-4 border-t border-border-dark">
+          <button
+            onClick={onClose}
+            className="bg-primary-accent text-base-dark px-4 py-2 rounded font-bold hover:opacity-90 transition-opacity"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function PacketTable({ packets }) {
   const parentRef = React.useRef(null);
@@ -7,11 +60,19 @@ export default function PacketTable({ packets }) {
   const [filterType, setFilterType] = React.useState('all');
   const [filterValue, setFilterValue] = React.useState('');
   const [filteredPackets, setFilteredPackets] = React.useState(packets);
+  const [selectedPacket, setSelectedPacket] = React.useState(null);
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+
 
   // Automatically apply filtering whenever inputs change
   React.useEffect(() => {
     applyFilterLogic();
   }, [packets, filterType, filterValue]);
+
+  const handleRowClick = (packet) => {
+    setSelectedPacket(packet);
+    setIsModalOpen(true);
+  };
 
   const applyFilterLogic = () => {
     const value = filterValue.trim().toLowerCase();
@@ -62,6 +123,7 @@ export default function PacketTable({ packets }) {
   const tableMinWidth = '1000px';
 
   return (
+    <>
     <div className="bg-surface-dark border border-border-dark rounded-lg p-6 mt-6 flex flex-col">
       <h2 className="text-lg font-bold mb-4 text-primary-accent text-center">
         Raw Data of Captured Packets ({filteredPackets.length} shown of {packets.length})
@@ -131,7 +193,7 @@ export default function PacketTable({ packets }) {
               return (
                 <div
                   key={virtualRow.key}
-                  className="absolute left-0 w-full text-sm text-gray-200 hover:bg-gray-700 border-b border-gray-700"
+                  className="absolute left-0 w-full text-sm text-gray-200 hover:bg-gray-700 border-b border-gray-700 cursor-pointer transition-colors"
                   style={{
                     height: `${virtualRow.size}px`,
                     transform: `translateY(${virtualRow.start}px)`,
@@ -140,7 +202,9 @@ export default function PacketTable({ packets }) {
                     alignItems: 'center',
                     padding: '8px 0',
                   }}
+                  onClick={() => handleRowClick(packet)}
                 >
+
                   <div className="px-3 text-right truncate">{packet.no}</div>
                   <div className="px-3 text-center truncate text-gray-400">{packet.time}</div>
                   <div className="px-3 text-center truncate text-green-400">{packet.source}</div>
@@ -155,5 +219,11 @@ export default function PacketTable({ packets }) {
         </div>
       </div>
     </div>
+    <PacketDetailModal
+    packet={selectedPacket}
+    isOpen={isModalOpen}
+    onClose={() => setIsModalOpen(false)}
+  />
+  </>
   );
 }
