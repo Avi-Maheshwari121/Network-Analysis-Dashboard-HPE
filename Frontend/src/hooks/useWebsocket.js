@@ -6,7 +6,6 @@ const MAX_HISTORY_LENGTH = 30; // History length for charts
 
 // Helper function to calculate KPIs from history (remains the same)
 const calculateThroughputKPIs = (history) => {
-  // ... (keep existing implementation)
   if (!history || history.length === 0) {
     return { peakIn: 0, peakOut: 0, avgIn: 0, avgOut: 0 };
   }
@@ -55,6 +54,7 @@ export default function useWebSocket(url) {
   const [igmpMetrics, setIgmpMetrics] = useState(null);
   const [ipComposition, setIpComposition] = useState(null);
   const [encryptionComposition, setEncryptionComposition] = useState(null);
+  const [geolocations, setGeolocations] = useState([]);
 
   // Protocol Specific History
   const [tcpHistory, setTcpHistory] = useState([]);
@@ -193,6 +193,15 @@ export default function useWebSocket(url) {
                 });
             }
 
+            if (msg.new_geolocations && Array.isArray(msg.new_geolocations) && msg.new_geolocations.length > 0) {
+              setGeolocations(prevLocations => {
+                const existingIps = new Set(prevLocations.map(l => l.ip));
+                // Make sure to use the correct variable here too.
+                const newUniqueLocations = msg.new_geolocations.filter(l => !existingIps.has(l.ip));
+                return [...prevLocations, ...newUniqueLocations];
+              });
+            }
+
             // Update protocol-specific throughput history
             const updateProtocolHistory = (setter, metricsData) => {
               if (metricsData && metricsData.hasOwnProperty('inbound_throughput') && metricsData.hasOwnProperty('outbound_throughput')) {
@@ -257,6 +266,7 @@ export default function useWebSocket(url) {
               // *** NEW: Reset Top Talkers on start ***
               setTopTalkers([]);
               setCaptureSummary(null); setSummaryStatus('idle');
+              setGeolocations([]);
             } else if (msg.command === "start_capture" && !msg.success) {
                  setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
             } else if (msg.command === "stop_capture") {
@@ -335,5 +345,7 @@ export default function useWebSocket(url) {
     encryptionComposition,
     // *** NEW: Export Top Talkers ***
     topTalkers,
+    // Geolocations
+    geolocations,
   };
 }
