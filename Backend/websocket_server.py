@@ -51,7 +51,8 @@ async def data_collection_loop():
                 "ipv4_metrics": shared_state.ipv4_metrics,
                 "ipv6_metrics": shared_state.ipv6_metrics,
                 "ip_composition": shared_state.ip_composition,
-                "encryption_composition": shared_state.encryption_composition
+                "encryption_composition": shared_state.encryption_composition,
+                "top_talkers": shared_state.top_talkers_top7
             }
             try:
                 await client.send(json.dumps(data_to_send))
@@ -146,7 +147,8 @@ async def websocket_handler(websocket):
             "ipv4_metrics": shared_state.ipv4_metrics,
             "ipv6_metrics": shared_state.ipv6_metrics,
             "ip_composition": shared_state.ip_composition,
-            "encryption_composition": shared_state.encryption_composition
+            "encryption_composition": shared_state.encryption_composition,
+            "top_talkers": shared_state.top_talkers_top7
         }
         await websocket.send(json.dumps(initial_data))
 
