@@ -4,7 +4,7 @@
  import Dashboard from "./pages/Dashboard";
  import RawData from "./pages/RawData";
  import ProtocolStatsPage from "./pages/ProtocolStatsPage";
- import TrafficCompositionPage from "./pages/TrafficCompositionPage"; // Import new page
+ import TrafficCompositionPage from "./pages/TrafficCompositionPage";
  import useWebSocket from "./hooks/useWebsocket.js";
 
  const WEBSOCKET_URL = "ws://localhost:8765";
@@ -14,52 +14,33 @@
 
    const {
      wsConnected,
-     metrics, // Contains overall packets_per_second now
+     metrics,
      packets,
      commandStatus,
      loading,
      error,
      sendCommand,
      interfaces,
-     metricsHistory, // Global throughput history
+     metricsHistory,
      protocolDistribution,
      // Protocol Metrics
-     tcpMetrics,
-     rtpMetrics,
-     udpMetrics,
-     quicMetrics,
-     dnsMetrics, // <-- Get DNS
-     igmpMetrics, // <-- Get IGMP
-     // IP Specific Metrics (for new page)
-     ipv4Metrics,
-     ipv6Metrics,
-     ipComposition, // Includes cumulative counts now
+     tcpMetrics, rtpMetrics, udpMetrics, quicMetrics, dnsMetrics, igmpMetrics,
+     // IP Specific Metrics
+     ipv4Metrics, ipv6Metrics, ipComposition,
      // Protocol History & KPIs
-     tcpHistory,
-     rtpHistory,
-     udpHistory,
-     quicHistory,
-     dnsHistory, // <-- Get DNS history
-     igmpHistory, // <-- Get IGMP history
-     // IP Specific History & KPIs (for new page)
-     ipv4History,
-     ipv6History,
-     tcpKPIs,
-     rtpKPIs,
-     udpKPIs,
-     quicKPIs,
-     dnsKPIs, // <-- Get DNS KPIs
-     igmpKPIs, // <-- Get IGMP KPIs
-     // IP Specific KPIs (for new page)
-     ipv4KPIs,
-     ipv6KPIs,
+     tcpHistory, rtpHistory, udpHistory, quicHistory, dnsHistory, igmpHistory,
+     // IP Specific History & KPIs
+     ipv4History, ipv6History,
+     tcpKPIs, rtpKPIs, udpKPIs, quicKPIs, dnsKPIs, igmpKPIs,
+     // IP Specific KPIs
+     ipv4KPIs, ipv6KPIs,
      // Full Metrics History
-     tcpFullMetricsHistory,
-     rtpFullMetricsHistory,
+     tcpFullMetricsHistory, rtpFullMetricsHistory,
      // AI Summary states
-     captureSummary,
-     summaryStatus,
-     encryptionComposition, // Encryption Composition State
+     captureSummary, summaryStatus,
+     encryptionComposition,
+     // *** NEW: Get topTalkers from hook ***
+     topTalkers,
    } = useWebSocket(WEBSOCKET_URL);
 
    return (
@@ -69,7 +50,7 @@
          {view === "dashboard" ? (
            <Dashboard
              wsConnected={wsConnected}
-             metrics={metrics} // Pass whole metrics object
+             metrics={metrics}
              commandStatus={commandStatus}
              loading={loading}
              error={error}
@@ -79,8 +60,11 @@
              protocolDistribution={protocolDistribution}
              captureSummary={captureSummary}
              summaryStatus={summaryStatus}
+             // *** NEW: Pass topTalkers to Dashboard ***
+             topTalkers={topTalkers}
            />
          ) : view === "rawdata" ? (
+            // ... (RawData props remain the same)
            <RawData
              wsConnected={wsConnected}
              packets={packets}
@@ -88,22 +72,23 @@
              metrics={metrics}
            />
          ) : view === "protocolstats" ? (
-           <ProtocolStatsPage
+            // ... (ProtocolStatsPage props remain the same)
+            <ProtocolStatsPage
              wsConnected={wsConnected}
              error={error}
-             metrics={metrics} // For status banner
-             // Pass only non-IP protocol metrics/history/KPIs
+             metrics={metrics}
              tcpMetrics={tcpMetrics} rtpMetrics={rtpMetrics} udpMetrics={udpMetrics} quicMetrics={quicMetrics} dnsMetrics={dnsMetrics} igmpMetrics={igmpMetrics}
              tcpHistory={tcpHistory} rtpHistory={rtpHistory} udpHistory={udpHistory} quicHistory={quicHistory} dnsHistory={dnsHistory} igmpHistory={igmpHistory}
              tcpKPIs={tcpKPIs} rtpKPIs={rtpKPIs} udpKPIs={udpKPIs} quicKPIs={quicKPIs} dnsKPIs={dnsKPIs} igmpKPIs={igmpKPIs}
              tcpFullMetricsHistory={tcpFullMetricsHistory}
              rtpFullMetricsHistory={rtpFullMetricsHistory}
            />
-         ) : view === "trafficcomposition" ? ( // <-- Route for new page
+         ) : view === "trafficcomposition" ? (
+             // ... (TrafficCompositionPage props remain the same)
             <TrafficCompositionPage
               wsConnected={wsConnected}
               error={error}
-              metrics={metrics} // For status banner
+              metrics={metrics}
               ipv4Metrics={ipv4Metrics}
               ipv6Metrics={ipv6Metrics}
               ipComposition={ipComposition}
@@ -111,7 +96,7 @@
               ipv6History={ipv6History}
               ipv4KPIs={ipv4KPIs}
               ipv6KPIs={ipv6KPIs}
-              encryptionComposition={encryptionComposition}  //Pass encryption data 
+              encryptionComposition={encryptionComposition}
             />
          ) : null}
        </main>
