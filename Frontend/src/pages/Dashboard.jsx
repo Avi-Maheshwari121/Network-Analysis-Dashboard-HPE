@@ -7,38 +7,34 @@ import MetricChart from "../components/MetricChart";
 import ProtocolPieChart from "../components/ProtocolPieChart";
 import ProtocolBarChart from '../components/ProtocolBarChart';
 import SummaryModal from '../components/SummaryModal';
+// *** NEW: Import the Sankey component ***
+import TopTalkersSankey from '../components/TopTalkersSankey';
 
 export default function Dashboard({
   wsConnected,
-  metrics, // This object now contains packets_per_second
+  metrics,
   commandStatus,
   loading,
   error,
   sendCommand,
   interfaces,
-  metricsHistory, // Global throughput history
+  metricsHistory,
   protocolDistribution,
-  // Removed ipv4Metrics, ipv6Metrics as they are not needed here anymore
-  // AI Summary props
   captureSummary,
   summaryStatus,
+  // *** NEW: Get topTalkers from props (passed down from App.jsx via useWebSocket) ***
+  topTalkers,
 }) {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
-
-  const isUiLocked = loading && summaryStatus !== 'done';
-
-// --- ADD THIS NEW, CORRECTED LOGIC ---
-
   const [captureDuration, setCaptureDuration] = useState(0);
-  // useRef to store the exact start time, unaffected by re-renders.
   const startTimeRef = useRef(null);
-  
-  useEffect(() => {
-    let intervalId = null;
 
-    // A. Logic for when CAPTURE IS RUNNING
+  useEffect(() => {
+    // ... (keep existing duration logic)
+     let intervalId = null;
+
     if (metrics?.status === 'running') {
-      sessionStorage.removeItem('finalCaptureDuration'); // Clear any previous final time
+      sessionStorage.removeItem('finalCaptureDuration');
       let startTime = sessionStorage.getItem('captureStartTime');
       if (!startTime) {
         startTime = Date.now();
@@ -50,25 +46,22 @@ export default function Dashboard({
         setCaptureDuration(elapsed >= 0 ? elapsed : 0);
       }, 1000);
 
-    // B. Logic for when CAPTURE IS STOPPED
     } else {
       const finalDuration = sessionStorage.getItem('finalCaptureDuration');
-      // If a final duration is stored, display it.
       if (finalDuration) {
         setCaptureDuration(parseInt(finalDuration, 10));
       } else {
-        // Otherwise, save the current timer value as the final duration.
-        sessionStorage.setItem('finalCaptureDuration', captureDuration);
+         if (captureDuration > 0) { // Only save if there was a duration tracked
+             sessionStorage.setItem('finalCaptureDuration', captureDuration);
+         }
       }
-      // Clear the start time so the next capture is fresh.
       sessionStorage.removeItem('captureStartTime');
     }
 
-    // C. Cleanup Function
     return () => {
       clearInterval(intervalId);
     };
-  }, [metrics]);
+  }, [metrics?.status]); // Depend only on status change
 
   return (
     <div>
@@ -83,7 +76,7 @@ export default function Dashboard({
         captureDuration={captureDuration}
       />
 
-      {/* Row 1: Simplified Metric Cards - Pass the whole metrics object */}
+      {/* Row 1: Simplified Metric Cards */}
       <MetricCards metrics={metrics} />
 
       {/* Row 2: Full Width Throughput Chart */}
@@ -108,6 +101,9 @@ export default function Dashboard({
              <ProtocolBarChart data={protocolDistribution} />
         </div>
       </div>
+
+      {/* *** NEW: Row 4: Top Talkers Sankey Diagram *** */}
+      <TopTalkersSankey topTalkers={topTalkers} />
 
       {/* AI Summary Modal */}
       <SummaryModal
