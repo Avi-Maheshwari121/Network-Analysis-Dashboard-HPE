@@ -296,6 +296,9 @@ def resetSharedState():
     shared_state.top_talkers_cumulative = {}
     shared_state.top_talkers_top7 = []
 
+    shared_state.queried_public_ips = set()
+    shared_state.new_geolocations = []
+
 
 async def stop_tshark():
     """Stop tshark packet capture process"""

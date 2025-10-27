@@ -174,3 +174,7 @@ top_talkers_cumulative = {}
 
 # Top 7 talkers to send to frontend
 top_talkers_top7 = []
+
+# Geolocation tracking
+queried_public_ips = set()  # Track IPs we've already queried
+new_geolocations = []  # New geolocations to send to frontend {ip: {lat, lon, city, country}}
