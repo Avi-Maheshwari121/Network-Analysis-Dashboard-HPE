@@ -282,6 +282,7 @@ def resetSharedState():
         "ipv4_percentage": 0,
         "ipv6_percentage": 0
     }
+
     shared_state.encryption_composition = {
         "encrypted_packets": 0,
         "unencrypted_packets": 0,
@@ -291,6 +292,13 @@ def resetSharedState():
         "encrypted_percentage": 0,
         "unencrypted_percentage": 0
     }
+
+    shared_state.top_talkers_cumulative = {}
+    shared_state.top_talkers_top7 = []
+
+    shared_state.queried_public_ips = set()
+    shared_state.new_geolocations = []
+
 
 async def stop_tshark():
     """Stop tshark packet capture process"""

@@ -10,6 +10,7 @@ import capture_manager
 import metrics_calculator
 import shared_state
 import llm_summarizer
+import geolocation_handler
 
 
 async def data_collection_loop():
@@ -51,13 +52,19 @@ async def data_collection_loop():
                 "ipv4_metrics": shared_state.ipv4_metrics,
                 "ipv6_metrics": shared_state.ipv6_metrics,
                 "ip_composition": shared_state.ip_composition,
-                "encryption_composition": shared_state.encryption_composition
+                "encryption_composition": shared_state.encryption_composition,
+                "top_talkers": shared_state.top_talkers_top7,
+                "new_geolocations": shared_state.new_geolocations
             }
+            
             try:
                 await client.send(json.dumps(data_to_send))
             except websockets.exceptions.ConnectionClosed:
                 disconnected_clients.add(client)
 
+        # Clear new geolocations after sending
+        shared_state.new_geolocations = []
+        
         if disconnected_clients:
             for client in disconnected_clients:
                 if client in shared_state.connected_clients:
@@ -146,7 +153,8 @@ async def websocket_handler(websocket):
             "ipv4_metrics": shared_state.ipv4_metrics,
             "ipv6_metrics": shared_state.ipv6_metrics,
             "ip_composition": shared_state.ip_composition,
-            "encryption_composition": shared_state.encryption_composition
+            "encryption_composition": shared_state.encryption_composition,
+            "top_talkers": shared_state.top_talkers_top7
         }
         await websocket.send(json.dumps(initial_data))
 
@@ -191,6 +199,8 @@ async def start_websocket_server():
     print("Starting WebSocket server on ws://localhost:8765")
     
     asyncio.create_task(data_collection_loop())
+    asyncio.create_task(geolocation_handler.geolocation_loop())
+    
     server = await websockets.serve(
         websocket_handler, 
         "localhost", 

@@ -40,6 +40,54 @@ STATIC_PAYLOAD_RATES = {
 }
 
 
+def update_top_talkers(source_ip, dest_ip, packet_length):
+    """ Update cumulative top talkers statistics.
+    Only tracks when source IP is from device (outbound traffic)."""
+
+    # Check if source IP is from this device
+    if source_ip not in (shared_state.ipv4_ips + shared_state.ipv6_ips):
+        return
+    
+    # Skip if destination is invalid
+    if dest_ip == "N/A" or not dest_ip:
+        return
+    
+    # Create tuple key for this connection
+    key = (source_ip, dest_ip)
+    
+    # Update or create entry
+    if key in shared_state.top_talkers_cumulative:
+        shared_state.top_talkers_cumulative[key]["packets"] += 1
+        shared_state.top_talkers_cumulative[key]["bytes"] += packet_length
+    else:
+        shared_state.top_talkers_cumulative[key] = {
+            "packets": 1,
+            "bytes": packet_length
+        }
+
+
+def calculate_top_talkers():
+    """ Calculate top 7 talkers based on total bytes transferred.
+    Returns list of top 7 in format: [src_ip, dst_ip, packets, bytes] """
+
+    if not shared_state.top_talkers_cumulative:
+        shared_state.top_talkers_top7 = []
+        return
+    
+    # Sort by bytes (descending) and get top 7
+    sorted_talkers = sorted(
+        shared_state.top_talkers_cumulative.items(),
+        key=lambda x: x[1]["bytes"],
+        reverse=True
+    )[:7]
+    
+    # Format for frontend
+    shared_state.top_talkers_top7 = [
+        [src_ip, dst_ip, stats["packets"], str(stats["bytes"])]
+        for (src_ip, dst_ip), stats in sorted_talkers
+    ]
+
+    
 def get_protocol_category(protocol_name):
     if not protocol_name or protocol_name == "N/A":
         return "OTHERS"
@@ -345,12 +393,14 @@ def calculate_metrics():
                         total_tcp_retransmissions += 1
 
 
-                    # Throughput and Goodput
+                    # Throughput, Goodput and Top Talkers
                     time_rel = float(pkt[1]) if pkt[1] else -1 
                     length = int(pkt[4]) if pkt[4] else 0
 
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
+
+                    update_top_talkers(source_ip, destination_ip, length)
 
                     payload_len_str = pkt[21] if pkt[21] else "0" # tcp.len
                     payload_len = int(payload_len_str) if payload_len_str else 0
@@ -404,6 +454,7 @@ def calculate_metrics():
                     #Encryption Check 
                     protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
                     is_encrypted = False
+
                     # Define encrypted protocols 
                     encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
                     if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
@@ -470,6 +521,8 @@ def calculate_metrics():
                     
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
+
+                    update_top_talkers(source_ip, destination_ip, length)
 
                     payload_len_str = pkt[22] if pkt[22] else "0" # udp.length
                     payload_len = int(payload_len_str) if payload_len_str else 0
@@ -605,6 +658,8 @@ def calculate_metrics():
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
 
+                    update_top_talkers(source_ip, destination_ip, length)
+
                     payload_len_str = pkt[22] if pkt[22] else "0"
                     payload_len = int(payload_len_str) if payload_len_str else 0
 
@@ -672,6 +727,8 @@ def calculate_metrics():
                     
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
+
+                    update_top_talkers(source_ip, destination_ip, length)
 
                     payload_len_str = pkt[22] if pkt[22] else "0"
                     payload_len = int(payload_len_str) if payload_len_str else 0
@@ -741,6 +798,8 @@ def calculate_metrics():
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
 
+                    update_top_talkers(source_ip, destination_ip, length)
+
                     payload_len_str = pkt[22] if pkt[22] else "0"
                     payload_len = int(payload_len_str) if payload_len_str else 0
 
@@ -808,6 +867,8 @@ def calculate_metrics():
                     
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
+
+                    update_top_talkers(source_ip, destination_ip, length)
 
                     payload_len_str = pkt[22] if pkt[22] else "0"
                     payload_len = int(payload_len_str) if payload_len_str else 0
@@ -877,6 +938,8 @@ def calculate_metrics():
                     
                     source_ip = pkt[2] or pkt[16] or "N/A"
                     destination_ip = pkt[3] or pkt[17] or "N/A"
+
+                    update_top_talkers(source_ip, destination_ip, length)
 
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
@@ -1039,6 +1102,9 @@ def calculate_metrics():
     shared_state.igmp_metrics = igmp_temp_metrics
     shared_state.encryption_composition = encryption_temp_composition  
 
+    # Update Top 7 talkers
+    calculate_top_talkers()
+
     # Append a snapshot of the current metrics to the history lists for session analysis.
     # This is where the historical data for the LLM summarizer is collected.
 
@@ -1079,7 +1145,7 @@ def calculate_metrics():
 
     timing_end = time.perf_counter()  # ← Different name for timing, for checking purpose
     print(f"Metrics calculation took: {(timing_end - timing_start) * 1000:.2f}ms")
- 
+    
     return shared_state.metrics_state
 
 

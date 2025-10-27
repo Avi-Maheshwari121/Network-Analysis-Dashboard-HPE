@@ -167,3 +167,14 @@ udp_metrics_history = []
 quic_metrics_history = []
 dns_metrics_history = []
 igmp_metrics_history = []
+
+# Top Talkers - Cumulative tracking
+# Dictionary structure: {(src_ip, dst_ip): {"packets": count, "bytes": total_bytes}}
+top_talkers_cumulative = {}
+
+# Top 7 talkers to send to frontend
+top_talkers_top7 = []
+
+# Geolocation tracking
+queried_public_ips = set()  # Track IPs we've already queried
+new_geolocations = []  # New geolocations to send to frontend {ip: {lat, lon, city, country}}
