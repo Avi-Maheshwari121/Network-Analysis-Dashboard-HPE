@@ -20,8 +20,8 @@ export default function Sidebar({ activeView, setActiveView }) {
         <NavButton view="dashboard">Dashboard</NavButton>
         <NavButton view="rawdata">Raw Data</NavButton>
         <NavButton view="protocolstats">Protocol Stats</NavButton>
-        {/* Changed name to Traffic Composition */}
         <NavButton view="trafficcomposition">Traffic Composition</NavButton>
+        <NavButton view="geomap">Geo Map</NavButton>
       </nav>
     </aside>
   );

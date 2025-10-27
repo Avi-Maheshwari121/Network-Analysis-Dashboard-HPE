@@ -5,6 +5,7 @@
  import RawData from "./pages/RawData";
  import ProtocolStatsPage from "./pages/ProtocolStatsPage";
  import TrafficCompositionPage from "./pages/TrafficCompositionPage";
+ import GeoMapPage from "./pages/GeoMapPage";
  import useWebSocket from "./hooks/useWebsocket.js";
 
  const WEBSOCKET_URL = "ws://localhost:8765";
@@ -41,9 +42,11 @@
      encryptionComposition,
      // *** NEW: Get topTalkers from hook ***
      topTalkers,
+     // Geolocations
+     geolocations,
    } = useWebSocket(WEBSOCKET_URL);
 
-   return (
+return (
      <div className="bg-base-dark min-h-screen text-text-main font-sans flex">
        <Sidebar activeView={view} setActiveView={setView} />
        <main className="flex-1 p-8">
@@ -60,11 +63,11 @@
              protocolDistribution={protocolDistribution}
              captureSummary={captureSummary}
              summaryStatus={summaryStatus}
-             // *** NEW: Pass topTalkers to Dashboard ***
+             // Pass topTalkers to Dashboard
              topTalkers={topTalkers}
            />
          ) : view === "rawdata" ? (
-            // ... (RawData props remain the same)
+            // ... (RawDataPage)
            <RawData
              wsConnected={wsConnected}
              packets={packets}
@@ -72,7 +75,7 @@
              metrics={metrics}
            />
          ) : view === "protocolstats" ? (
-            // ... (ProtocolStatsPage props remain the same)
+            // ... (ProtocolStatsPage)
             <ProtocolStatsPage
              wsConnected={wsConnected}
              error={error}
@@ -84,20 +87,28 @@
              rtpFullMetricsHistory={rtpFullMetricsHistory}
            />
          ) : view === "trafficcomposition" ? (
-             // ... (TrafficCompositionPage props remain the same)
+             // ... (TrafficCompositionPage)
             <TrafficCompositionPage
-              wsConnected={wsConnected}
-              error={error}
-              metrics={metrics}
-              ipv4Metrics={ipv4Metrics}
-              ipv6Metrics={ipv6Metrics}
-              ipComposition={ipComposition}
-              ipv4History={ipv4History}
-              ipv6History={ipv6History}
-              ipv4KPIs={ipv4KPIs}
-              ipv6KPIs={ipv6KPIs}
-              encryptionComposition={encryptionComposition}
+             wsConnected={wsConnected}
+             error={error}
+             metrics={metrics}
+             ipv4Metrics={ipv4Metrics}
+             ipv6Metrics={ipv6Metrics}
+             ipComposition={ipComposition}
+             ipv4History={ipv4History}
+             ipv6History={ipv6History}
+             ipv4KPIs={ipv4KPIs}
+             ipv6KPIs={ipv6KPIs}
+             encryptionComposition={encryptionComposition}
             />
+         ) : view === "geomap" ? (
+             // ... (GeoMapPage)
+           <GeoMapPage
+             wsConnected={wsConnected}
+             error={error}
+             metrics={metrics}
+             geolocations={geolocations}
+           />
          ) : null}
        </main>
      </div>

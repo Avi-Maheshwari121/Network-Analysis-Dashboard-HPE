@@ -7,7 +7,6 @@ import MetricChart from "../components/MetricChart";
 import ProtocolPieChart from "../components/ProtocolPieChart";
 import ProtocolBarChart from '../components/ProtocolBarChart';
 import SummaryModal from '../components/SummaryModal';
-// *** NEW: Import the Sankey component ***
 import TopTalkersSankey from '../components/TopTalkersSankey';
 
 export default function Dashboard({
@@ -22,7 +21,7 @@ export default function Dashboard({
   protocolDistribution,
   captureSummary,
   summaryStatus,
-  // *** NEW: Get topTalkers from props (passed down from App.jsx via useWebSocket) ***
+  //Get topTalkers from props (passed down from App.jsx via useWebSocket)
   topTalkers,
 }) {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
@@ -30,7 +29,6 @@ export default function Dashboard({
   const startTimeRef = useRef(null);
 
   useEffect(() => {
-    // ... (keep existing duration logic)
      let intervalId = null;
 
     if (metrics?.status === 'running') {
