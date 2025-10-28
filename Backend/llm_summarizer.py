@@ -78,27 +78,31 @@ async def generate_summary():
     # 3. Use final cumulative IP Composition values directly from shared_state
     ipv4_cumulative = shared_state.ip_composition.get("ipv4_packets_cumulative", 0)
     ipv6_cumulative = shared_state.ip_composition.get("ipv6_packets_cumulative", 0)
-    total_ip_packets = ipv4_cumulative + ipv6_cumulative
+    total_ip_packets = shared_state.ip_composition.get("total_packets", 0)
+    ipv4_percentage = shared_state.ip_composition.get("ipv4_percentage", 0)
+    ipv6_percentage = shared_state.ip_composition.get("ipv6_percentage", 0)
     
     ip_composition_data = {
         "total_packets": total_ip_packets,
         "ipv4_packets": ipv4_cumulative,
         "ipv6_packets": ipv6_cumulative,
-        "ipv4_percentage": round((ipv4_cumulative * 100) / max(1, total_ip_packets), 2),
-        "ipv6_percentage": round((ipv6_cumulative * 100) / max(1, total_ip_packets), 2),
+        "ipv4_percentage": round(ipv4_percentage,2),
+        "ipv6_percentage": round(ipv6_percentage, 2),
     }
     
    # 4. Pre-calculate final Encryption Composition from shared_state
     encrypted_cumulative = shared_state.encryption_composition.get("encrypted_packets_cumulative", 0)
     unencrypted_cumulative = shared_state.encryption_composition.get("unencrypted_packets_cumulative", 0)
-    total_encryption_packets = encrypted_cumulative + unencrypted_cumulative
+    total_encryption_packets = shared_state.encryption_composition.get("total_packets", 0)
+    encrypted_percentage = shared_state.encryption_composition.get("encrypted_percentage", 0)
+    unencrypted_percentage = shared_state.encryption_composition.get("unencrypted_percentage", 0)
 
     encryption_composition_data = {
         "total_packets": total_encryption_packets,
         "encrypted_packets": encrypted_cumulative,
         "unencrypted_packets": unencrypted_cumulative,
-        "encrypted_percentage": round((encrypted_cumulative * 100) / max(1, total_encryption_packets), 2),
-        "unencrypted_percentage": round((unencrypted_cumulative * 100) / max(1, total_encryption_packets), 2),
+        "encrypted_percentage": round(encrypted_percentage,2),
+        "unencrypted_percentage": round(unencrypted_percentage,2),
     }
 
     # 5. Pre-calculate all performance metrics for each protocol
