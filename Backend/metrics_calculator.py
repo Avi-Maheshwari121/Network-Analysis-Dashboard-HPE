@@ -234,14 +234,11 @@ def calculate_metrics():
         shared_state.ip_composition.update({
             "ipv4_packets": 0,
             "ipv6_packets": 0,
-            "total_packets": 0,
-            "ipv4_percentage": 0,
-            "ipv6_percentage": 0
+            "total_packets": 0
         })
+        
         shared_state.encryption_composition.update({
             "total_packets": 0,
-            "encrypted_percentage": 0,
-            "unencrypted_percentage": 0,
             "encrypted_packets": 0,
             "unencrypted_packets": 0
         })
