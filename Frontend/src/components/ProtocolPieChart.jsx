@@ -22,7 +22,7 @@ export default function ProtocolPieChart({ data }) {
 
   return (
     <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72">
-      <h3 className="text-md font-semibold text-text-main mb-4">Protocol Distribution</h3>
+      <h3 className="text-md font-semibold text-text-main mb-4">Cumulative Protocol Distribution</h3>
       <ResponsiveContainer width="100%" height="85%">
         <PieChart margin={{ top: 20 }}>
           <Pie

@@ -80,7 +80,7 @@ export default function TopTalkersSankey({ topTalkers }) {
 
   return (
     <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-96 flex flex-col mt-6">
-      <h3 className="text-md font-semibold text-text-main mb-2">Top 7 Outbound Conversations (by Volume)</h3>
+      <h3 className="text-md font-semibold text-text-main mb-2">Top 7 Outbound Conversations (by Cumulative Volume)</h3>
       {googleSankeyData ? (
         <Chart
           chartType="Sankey"
