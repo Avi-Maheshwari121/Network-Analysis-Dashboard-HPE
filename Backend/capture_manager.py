@@ -184,7 +184,7 @@ def resetSharedState():
         "TCP": 0,
         "UDP": 0,
         "RTP": 0,
-        "TLSV": 0,
+        "TLS": 0,
         "QUIC": 0,
         "DNS": 0,
         "Others": 0

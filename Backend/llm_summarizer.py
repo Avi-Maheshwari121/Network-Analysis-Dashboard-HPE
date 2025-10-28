@@ -125,7 +125,7 @@ async def generate_summary():
 
         if proto_name == 'TCP':
             protocol_data[proto_name]['total_retransmissions'] = final_metrics.get('packet_loss', 0)
-            protocol_data[proto_name]['retansmission_percentage'] = round(final_metrics.get('packet_loss_percentage', 0), 2)
+            protocol_data[proto_name]['retransmissions_percentage'] = round(final_metrics.get('packet_loss_percentage', 0), 2)
         
         if proto_name == 'RTP':
             protocol_data[proto_name]['total_packet_loss'] = final_metrics.get('packet_loss', 0)
