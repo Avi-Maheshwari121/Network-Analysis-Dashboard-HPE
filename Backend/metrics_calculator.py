@@ -104,8 +104,8 @@ def get_protocol_category(protocol_name):
         return "QUIC"
     elif protocol == "DNS":
         return "DNS"
-    elif "TLSV" in protocol:  # matches TLSV1.2, TLSV1.3, etc.
-        return "TLSV"
+    elif "TLS" in protocol:  # matches TLSV1.2, TLSV1.3, etc.
+        return "TLS"
     else:
         return "Others"
     
