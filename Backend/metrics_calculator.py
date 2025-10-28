@@ -1059,30 +1059,34 @@ def calculate_metrics():
     ip_temp_composition["ipv4_packets"] = ipv4_temp_metrics["inbound_packets"] + ipv4_temp_metrics["outbound_packets"]
     ip_temp_composition["ipv6_packets"] = ipv6_temp_metrics["inbound_packets"] + ipv6_temp_metrics["outbound_packets"]
     ip_temp_composition["total_packets"] = ip_temp_composition["ipv4_packets"] + ip_temp_composition["ipv6_packets"]
-    ip_temp_composition["ipv4_percentage"] = (ip_temp_composition["ipv4_packets"] * 100) / (max(1, ip_temp_composition["total_packets"]))
-    ip_temp_composition["ipv6_percentage"] = (ip_temp_composition["ipv6_packets"] * 100) / (max(1, ip_temp_composition["total_packets"]))
     ip_temp_composition["ipv4_packets_cumulative"] += ip_temp_composition["ipv4_packets"]
     ip_temp_composition["ipv6_packets_cumulative"] += ip_temp_composition["ipv6_packets"]
+    
+    ip_total_cum = ip_temp_composition["ipv4_packets_cumulative"] + ip_temp_composition["ipv6_packets_cumulative"]
+    if(ip_total_cum > 0):
+        ip_temp_composition["ipv4_percentage"] = (ip_temp_composition["ipv4_packets_cumulative"] * 100) / ip_total_cum
+        ip_temp_composition["ipv6_percentage"] = (ip_temp_composition["ipv6_packets_cumulative"] * 100) / ip_total_cum
 
     # After processing all streams/packets, adding the finalize stats
     total_batch_packets = encryption_temp_composition["encrypted_packets"] + encryption_temp_composition["unencrypted_packets"]
     encryption_temp_composition["total_packets"] = total_batch_packets
 
-    if total_batch_packets > 0:
-        encryption_temp_composition["encrypted_percentage"] = (encryption_temp_composition["encrypted_packets"] * 100) / total_batch_packets
-        encryption_temp_composition["unencrypted_percentage"] = (encryption_temp_composition["unencrypted_packets"] * 100) / total_batch_packets
-
     # Update cumulative counts
     encryption_temp_composition["encrypted_packets_cumulative"] += encryption_temp_composition["encrypted_packets"]
     encryption_temp_composition["unencrypted_packets_cumulative"] += encryption_temp_composition["unencrypted_packets"]
+
+    total_packets_cum = encryption_temp_composition["encrypted_packets_cumulative"] + encryption_temp_composition["unencrypted_packets_cumulative"]
+    if total_packets_cum > 0:
+        encryption_temp_composition["encrypted_percentage"] = (encryption_temp_composition["encrypted_packets_cumulative"] * 100) / total_packets_cum
+        encryption_temp_composition["unencrypted_percentage"] = (encryption_temp_composition["unencrypted_packets_cumulative"] * 100) / total_packets_cum
 
 
     # Update metrics
     shared_state.metrics_state.update({
         "inbound_throughput": in_throughput,
         "outbound_throughput": out_throughput,
-        "inbound_goodput": in_goodput,
-        "outbound_goodput": out_goodput,
+        "inbound_goodput": abs(in_goodput),
+        "outbound_goodput": abs(out_goodput),
         "last_update": datetime.now().isoformat(),
         "protocol_distribution": shared_state.protocol_distribution,
         "streamCount": streams_count,
