@@ -21,45 +21,87 @@ export default function Dashboard({
   protocolDistribution,
   captureSummary,
   summaryStatus,
-  //Get topTalkers from props (passed down from App.jsx via useWebSocket)
   topTalkers,
 }) {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [captureDuration, setCaptureDuration] = useState(0);
-  const startTimeRef = useRef(null);
+  const intervalRef = useRef(null);
 
+  // Check sessionStorage only on initial mount to handle refresh persistence
   useEffect(() => {
-     let intervalId = null;
+    const storedStartTime = sessionStorage.getItem('captureStartTime');
+    const backendStatus = metrics?.status; // Get status directly from props on mount
 
-    if (metrics?.status === 'running') {
-      sessionStorage.removeItem('finalCaptureDuration');
-      let startTime = sessionStorage.getItem('captureStartTime');
-      if (!startTime) {
-        startTime = Date.now();
-        sessionStorage.setItem('captureStartTime', startTime);
-      }
-
-      intervalId = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setCaptureDuration(elapsed >= 0 ? elapsed : 0);
-      }, 1000);
-
+    if (backendStatus === 'running' && storedStartTime) {
+      // If backend is running AND we have a stored start time (persisted refresh)
+      const elapsedOnLoad = Math.floor((Date.now() - parseInt(storedStartTime, 10)) / 1000);
+      setCaptureDuration(elapsedOnLoad >= 0 ? elapsedOnLoad : 0);
+      console.log("Detected running status and start time on mount. Resuming timer.");
+      startInterval(parseInt(storedStartTime, 10));
     } else {
-      const finalDuration = sessionStorage.getItem('finalCaptureDuration');
-      if (finalDuration) {
-        setCaptureDuration(parseInt(finalDuration, 10));
-      } else {
-         if (captureDuration > 0) { // Only save if there was a duration tracked
-             sessionStorage.setItem('finalCaptureDuration', captureDuration);
-         }
-      }
-      sessionStorage.removeItem('captureStartTime');
+      // If not running or no stored time, ensure timer is 0
+      setCaptureDuration(0);
+      sessionStorage.removeItem('captureStartTime'); // Clean up just in case
+      console.log("No running status or start time on mount. Setting timer to 0.");
     }
 
     return () => {
-      clearInterval(intervalId);
+      stopInterval();
+      console.log("Dashboard component unmounted, interval cleared.");
     };
-  }, [metrics?.status]); // Depend only on status change
+  }, []); // Run only once on initial mount/refresh
+
+  // Helper function to start the interval
+  const startInterval = (startTime) => {
+    stopInterval(); // Clear existing interval first
+    intervalRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      setCaptureDuration(elapsed >= 0 ? elapsed : 0);
+    }, 1000);
+    console.log("Timer interval started.");
+  };
+
+  // Helper function to stop the interval
+  const stopInterval = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+      console.log("Timer interval stopped.");
+    }
+  };
+
+  // Effect to manage the timer based on backend status changes
+  useEffect(() => {
+    if (metrics?.status === 'running') {
+      let startTime = sessionStorage.getItem('captureStartTime');
+      if (!startTime) {
+        // "Start Capture" was just clicked
+        startTime = Date.now();
+        sessionStorage.setItem('captureStartTime', startTime);
+        setCaptureDuration(0); // Start from 0 when clicking Start
+        console.log("Starting capture. Set start time:", startTime);
+        startInterval(startTime);
+      } else {
+        // Resuming view while already running
+        if (!intervalRef.current) {
+             console.log("Status running, start time exists, ensuring interval is running.");
+             startInterval(parseInt(startTime, 10));
+        }
+      }
+    } else { // Status is 'stopped'
+      stopInterval();
+      // <<< REMOVED: setCaptureDuration(0); >>>  // Don't reset duration on stop
+      sessionStorage.removeItem('captureStartTime'); // Clean up start time
+      console.log("Capture stopped. Interval stopped, start time removed.");
+      // The captureDuration state retains its last value
+    }
+
+    return () => {
+      // Stop interval on cleanup (e.g., status change away from running)
+      stopInterval();
+    };
+  }, [metrics?.status]); // Re-run when backend status changes
+
 
   return (
     <div>
@@ -73,11 +115,7 @@ export default function Dashboard({
         onShowSummary={() => setIsSummaryModalOpen(true)}
         captureDuration={captureDuration}
       />
-
-      {/* Row 1: Simplified Metric Cards */}
       <MetricCards metrics={metrics} />
-
-      {/* Row 2: Full Width Throughput Chart */}
       <div className="mt-6 h-72">
          <MetricChart
             title="Overall Throughput"
@@ -89,8 +127,6 @@ export default function Dashboard({
             ]}
           />
       </div>
-
-      {/* Row 3: Protocol Distribution Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-1">
             <ProtocolPieChart data={protocolDistribution} />
@@ -99,11 +135,7 @@ export default function Dashboard({
              <ProtocolBarChart data={protocolDistribution} />
         </div>
       </div>
-
-      {/* *** NEW: Row 4: Top Talkers Sankey Diagram *** */}
       <TopTalkersSankey topTalkers={topTalkers} />
-
-      {/* AI Summary Modal */}
       <SummaryModal
         summaryData={captureSummary}
         isLoading={summaryStatus === 'loading'}
