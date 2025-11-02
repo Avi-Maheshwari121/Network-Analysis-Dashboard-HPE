@@ -1,5 +1,4 @@
-// src/components/ProtocolPieChart.jsx
-
+// Frontend/src/components/ProtocolPieChart.jsx
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
@@ -18,7 +17,17 @@ export default function ProtocolPieChart({ data }) {
     name,
     value,
     fill: COLORS[index % COLORS.length],
-  }));
+  })).filter(entry => entry.value > 0); // Filter out zero values to avoid tiny slices
+
+  // Handle case where filtering results in no data
+  if (chartData.length === 0) {
+      return (
+          <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72 flex items-center justify-center">
+              <p className="text-text-secondary">No protocol activity detected yet.</p>
+          </div>
+      );
+  }
+
 
   return (
     <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72">
@@ -34,6 +43,8 @@ export default function ProtocolPieChart({ data }) {
             fill="#8884d8"
             dataKey="value"
             nameKey="name"
+            isAnimationActive={true} // Explicitly enable animation (default is true)
+            animationDuration={500} // Set animation duration in ms (e.g., 500ms)
           >
             {chartData.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.fill} />
