@@ -14,6 +14,7 @@ all_packets_history = []
 capture_active = False
 tshark_proc = None
 is_resetting = False  # Flag to block new connections during reset
+is_generating_summary = False # Flag to block 'start' during summary
 
 # WebSocket connections
 connected_clients = {}
@@ -62,8 +63,6 @@ packets_Per_Second = 0
 
 # TCP Data
 tcp_metrics = {
-    "inbound_packets": 0,
-    "outbound_packets": 0,
     "packets_per_second": 0,
     "packet_loss": 0,
     "packet_loss_percentage": 0,
@@ -74,8 +73,6 @@ tcp_metrics = {
 
 # RTP Data
 rtp_metrics = {
-    "inbound_packets": 0,
-    "outbound_packets": 0,
     "packets_per_second": 0,
     "packet_loss": 0,
     "packet_loss_percentage": 0,
@@ -86,8 +83,6 @@ rtp_metrics = {
 
 # UDP Data
 udp_metrics = {
-    "inbound_packets": 0,
-    "outbound_packets": 0,
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
@@ -95,8 +90,6 @@ udp_metrics = {
 
 # QUIC Data
 quic_metrics = {
-    "inbound_packets": 0,
-    "outbound_packets": 0,
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
@@ -104,8 +97,6 @@ quic_metrics = {
 
 # DNS Data
 dns_metrics = {
-    "inbound_packets": 0,
-    "outbound_packets": 0,
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
@@ -113,8 +104,6 @@ dns_metrics = {
 
 # IGMP Data
 igmp_metrics = {
-    "inbound_packets": 0,
-    "outbound_packets": 0,
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
@@ -122,8 +111,6 @@ igmp_metrics = {
 
 # IPV4 Data
 ipv4_metrics = {
-    "inbound_packets": 0,
-    "outbound_packets": 0,
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
@@ -131,8 +118,6 @@ ipv4_metrics = {
 
 # IPV6 Data
 ipv6_metrics = {
-    "inbound_packets": 0,
-    "outbound_packets": 0,
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
@@ -178,3 +163,10 @@ top_talkers_top7 = []
 # Geolocation tracking
 queried_public_ips = set()  # Track IPs we've already queried
 new_geolocations = []  # New geolocations to send to frontend {ip: {lat, lon, city, country}}
+
+# Map resolved IPs to their DNS query name
+ip_to_dns = {}
+
+# Per-IP statistics for map visualization
+# Structure: {"ip_address": {"packets": Y, "app_info": {...}}}
+ip_stats = {}

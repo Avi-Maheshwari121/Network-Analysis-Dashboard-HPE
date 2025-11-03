@@ -18,6 +18,7 @@ async def data_collection_loop():
     while True:
         await asyncio.sleep(0.1)
         
+        # This flag is now set to False by stop_tshark()
         if not capture_manager.is_capture_active():
             continue
         
@@ -32,10 +33,17 @@ async def data_collection_loop():
         # Check again after capture if clients or not
         if not shared_state.connected_clients:
             continue
-        
+
+        # Check if capture became inactive *during* the packet capture.
+        # If so, STOP here and do not run the final calculation.
+        # The stop_capture command will handle the final steps.
+        if not shared_state.capture_active:
+            continue
+
+        # This function correctly calculates and appends to history
         metrics_calculator.calculate_metrics()
         shared_state.session_metrics_history.append(shared_state.metrics_state)
-        
+
         disconnected_clients = set()
         for client in list(shared_state.connected_clients.keys()):
             data_to_send = {
@@ -71,13 +79,92 @@ async def data_collection_loop():
                     del shared_state.connected_clients[client]
             print(f"Cleaned up {len(disconnected_clients)} disconnected clients.")
 
+async def handle_stop_capture_task(websocket, data):
+    """
+    Handles the entire stop_capture flow as a background task.
+    This frees the main websocket loop to receive new commands.
+    """
+    
+    # 0. Check if capture is active. If not, it's already stopping.
+    if not shared_state.capture_active:
+        return # Silently exit, another stop command is already in progress
+
+    # 1. Get duration
+    final_duration = data.get("duration") 
+    if final_duration is not None:
+        shared_state.session_duration_final = int(final_duration)
+        print(f"Received accurate duration from frontend: {shared_state.session_duration_final}s")
+
+    # 2. Stop Tshark (this sets capture_active = False)
+    success, msg = await capture_manager.stop_tshark()
+    if success:
+        metrics_calculator.update_metrics_status("stopped")
+
+    # 3. Give the data_collection_loop a grace period (0.5s) to run its
+    #    FINAL metrics calculation and then stop (since capture_active is False).
+    await asyncio.sleep(0.5) 
+
+    # 4. Check if we should summarize
+    should_summarize = success and bool(shared_state.session_metrics_history)
+    
+    summary = None
+    if should_summarize:
+        print("Generating AI summary...")
+        shared_state.is_generating_summary = True # SET FLAG
+        try:
+            summary = await llm_summarizer.generate_summary()
+            print("Summary generated.")
+        except Exception as e:
+            error_msg = f"Error during summary: {e}"
+            print(error_msg)
+            # Send an error summary so the frontend knows it failed
+            summary = {"summary": error_msg, "breakdown": []} 
+        finally:
+            shared_state.is_generating_summary = False # UNSET FLAG
+    else:
+        if not success:
+            print("Summary skipped: Tshark did not stop successfully.")
+        if not bool(shared_state.session_metrics_history):
+            print("Summary skipped: No session history was found.")
+
+    # 5. Build the final response with the summary data
+    response = {
+        "type": "command_response", 
+        "command": "stop_capture", # This is the FINAL response
+        "success": success, 
+        "message": msg
+    }
+    if summary:
+        response["summary"] = summary
+    
+    # 6. Send the final response to the client
+    try:
+        await websocket.send(json.dumps(response))
+    except Exception as e:
+        print(f"Failed to send summary to client: {e}")
+    
+    # 7. NOW, reset the state for the next session
+    capture_manager.resetSharedState()
+    print("State reset for next session.")
+
 async def handle_command(command, data):
-    """Handle incoming WebSocket commands."""
+    """Handles commands that are fast and can be awaited directly."""
     if command == "get_interfaces":
         interfaces = capture_manager.get_network_interfaces()
         return {"type": "interfaces_response", "interfaces": interfaces}
     
     elif command == "start_capture":
+        
+        # This checks the loop isn't blocked by stop_capture
+        if shared_state.is_generating_summary:
+            print("Start capture rejected: Summary generation in progress.")
+            return {
+                "type": "command_response", 
+                "command": "start_capture", 
+                "success": False, 
+                "message": "Please wait, the previous session's summary is still being generated."
+            }
+
         if shared_state.tshark_proc is not None:
             success, msg = False, "Tshark already running"
         else:
@@ -87,36 +174,6 @@ async def handle_command(command, data):
             if success:
                 metrics_calculator.update_metrics_status("running")
         return {"type": "command_response", "command": "start_capture", "success": success, "message": msg}
-    
-    elif command == "stop_capture":
-        final_duration = data.get("duration") 
-        if final_duration is not None:
-            # If it exists, save the accurate value to the shared state
-            shared_state.session_duration_final = int(final_duration)
-            print(f"Received accurate duration from frontend: {shared_state.session_duration_final}s")
-
-        should_summarize = shared_state.capture_active and bool(shared_state.session_metrics_history)
-        
-        summary = None
-        if should_summarize:
-            print("Generating AI summary...")
-            summary = await llm_summarizer.generate_summary()
-            print("Summary generated.")
-
-        success, msg = await capture_manager.stop_tshark()
-        if success:
-            metrics_calculator.update_metrics_status("stopped")
-        
-        response = {
-            "type": "command_response", 
-            "command": "stop_capture", 
-            "success": success, 
-            "message": msg
-        }
-        if summary:
-            response["summary"] = summary
-            
-        return response
 
     elif command == "get_status":
         return {"type": "status_response", "metrics": shared_state.metrics_state}
@@ -162,7 +219,21 @@ async def websocket_handler(websocket):
             data = json.loads(message)
             command = data.get("command")
             
-            if command:
+            if command == "stop_capture":
+                # 1. Detach the slow logic as a background task
+                asyncio.create_task(handle_stop_capture_task(websocket, data))
+                
+                # 2. Send an *immediate* "Tshark stopped" response
+                #    This is for the 1.5s popup.
+                await websocket.send(json.dumps({
+                    "type": "command_response", 
+                    "command": "stop_capture_ack",
+                    "success": True, 
+                    "message": "Tshark stopped successfully"
+                }))
+                
+            elif command:
+                # All other commands are fast and can be awaited
                 response = await handle_command(command, data)
                 if response:
                     await websocket.send(json.dumps(response))
@@ -183,11 +254,15 @@ async def websocket_handler(websocket):
             # SET RESETTING FLAG 
             shared_state.is_resetting = True
             
+            # Call the *modified* stop_tshark (which no longer resets)
             await capture_manager.stop_tshark()
             metrics_calculator.update_metrics_status("stopped")
             
             # Wait for complete reset 
             await asyncio.sleep(0.3)
+            
+            # reset the state
+            capture_manager.resetSharedState()
             
             # CLEAR RESETTING FLAG 
             shared_state.is_resetting = False

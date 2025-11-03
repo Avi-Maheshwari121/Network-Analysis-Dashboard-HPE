@@ -166,8 +166,6 @@ def calculate_metrics():
         shared_state.packets_Per_Second = 0
 
         shared_state.tcp_metrics.update({
-            "inbound_packets": 0,
-            "outbound_packets": 0,
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
@@ -175,8 +173,6 @@ def calculate_metrics():
         })
 
         shared_state.rtp_metrics.update({
-            "inbound_packets": 0,
-            "outbound_packets": 0,
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
@@ -184,48 +180,36 @@ def calculate_metrics():
         })
 
         shared_state.udp_metrics = {
-            "inbound_packets": 0,
-            "outbound_packets": 0,
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
         }
 
         shared_state.quic_metrics = {
-            "inbound_packets": 0,
-            "outbound_packets": 0,
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
         }
 
         shared_state.dns_metrics = {
-            "inbound_packets": 0,
-            "outbound_packets": 0,
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
         }
 
         shared_state.igmp_metrics = {
-            "inbound_packets": 0,
-            "outbound_packets": 0,
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
         }
         
         shared_state.ipv4_metrics = {
-            "inbound_packets": 0,
-            "outbound_packets": 0,
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
         }
 
         shared_state.ipv6_metrics = {
-            "inbound_packets": 0,
-            "outbound_packets": 0,
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
@@ -989,41 +973,41 @@ def calculate_metrics():
     # Throughput
     duration = max(end_time - start_time, 1e-6) if start_time != float("inf") else 1e-6
     duration = max(duration, shared_state.capture_duration) 
-    in_throughput = ((inbound_bytes * 8) / duration) / 1000000 # Mbps
-    out_throughput = ((outbound_bytes * 8) / duration) / 1000000
+    in_throughput = ((inbound_bytes * 8) / duration)
+    out_throughput = ((outbound_bytes * 8) / duration)
 
     # Goodput
-    in_goodput = ((inbound_goodput_bytes * 8) / duration) / 1000000  # Mbps
-    out_goodput = ((outbound_goodput_bytes * 8) / duration) / 1000000  # Mbps
+    in_goodput = ((inbound_goodput_bytes * 8) / duration)
+    out_goodput = ((outbound_goodput_bytes * 8) / duration)
 
     # TCP Data
     tcp_temp_metrics["packets_per_second"] = expected_tcp_packets / duration
-    tcp_temp_metrics["inbound_throughput"] = ((tcp_temp_metrics["inbound_throughput"] * 8) / duration) / 1000000
-    tcp_temp_metrics["outbound_throughput"] = ((tcp_temp_metrics["outbound_throughput"] * 8) / duration) / 1000000
+    tcp_temp_metrics["inbound_throughput"] = ((tcp_temp_metrics["inbound_throughput"] * 8) / duration)
+    tcp_temp_metrics["outbound_throughput"] = ((tcp_temp_metrics["outbound_throughput"] * 8) / duration)
 
     # RTP Data
-    rtp_temp_metrics["inbound_throughput"] = ((rtp_temp_metrics["inbound_throughput"] * 8) / duration) / 1000000
-    rtp_temp_metrics["outbound_throughput"] = ((rtp_temp_metrics["outbound_throughput"] * 8) / duration) / 1000000
+    rtp_temp_metrics["inbound_throughput"] = ((rtp_temp_metrics["inbound_throughput"] * 8) / duration)
+    rtp_temp_metrics["outbound_throughput"] = ((rtp_temp_metrics["outbound_throughput"] * 8) / duration)
     rtp_temp_metrics["packets_per_second"] = (rtp_temp_metrics["inbound_packets"] + rtp_temp_metrics["outbound_packets"]) / duration
 
     # UDP Data
-    udp_temp_metrics["inbound_throughput"] = ((udp_temp_metrics["inbound_throughput"] * 8) / duration) / 1000000
-    udp_temp_metrics["outbound_throughput"] = ((udp_temp_metrics["outbound_throughput"] * 8) / duration) / 1000000
+    udp_temp_metrics["inbound_throughput"] = ((udp_temp_metrics["inbound_throughput"] * 8) / duration)
+    udp_temp_metrics["outbound_throughput"] = ((udp_temp_metrics["outbound_throughput"] * 8) / duration)
     udp_temp_metrics["packets_per_second"] = (udp_temp_metrics["inbound_packets"] + udp_temp_metrics["outbound_packets"]) / duration
 
     # QUIC Data
-    quic_temp_metrics["inbound_throughput"] = ((quic_temp_metrics["inbound_throughput"] * 8) / duration) / 1000000
-    quic_temp_metrics["outbound_throughput"] = ((quic_temp_metrics["outbound_throughput"] * 8) / duration) / 1000000
+    quic_temp_metrics["inbound_throughput"] = ((quic_temp_metrics["inbound_throughput"] * 8) / duration)
+    quic_temp_metrics["outbound_throughput"] = ((quic_temp_metrics["outbound_throughput"] * 8) / duration)
     quic_temp_metrics["packets_per_second"] = (quic_temp_metrics["inbound_packets"] + quic_temp_metrics["outbound_packets"]) / duration
     
     # DNS Data
-    dns_temp_metrics["inbound_throughput"] = ((dns_temp_metrics["inbound_throughput"] * 8) / duration) / 1000000
-    dns_temp_metrics["outbound_throughput"] = ((dns_temp_metrics["outbound_throughput"] * 8) / duration) / 1000000
+    dns_temp_metrics["inbound_throughput"] = ((dns_temp_metrics["inbound_throughput"] * 8) / duration)
+    dns_temp_metrics["outbound_throughput"] = ((dns_temp_metrics["outbound_throughput"] * 8) / duration)
     dns_temp_metrics["packets_per_second"] = (dns_temp_metrics["inbound_packets"] + dns_temp_metrics["outbound_packets"]) / duration
     
     # IGMP Data
-    igmp_temp_metrics["inbound_throughput"] = ((igmp_temp_metrics["inbound_throughput"] * 8) / duration) / 1000000
-    igmp_temp_metrics["outbound_throughput"] = ((igmp_temp_metrics["outbound_throughput"] * 8) / duration) / 1000000
+    igmp_temp_metrics["inbound_throughput"] = ((igmp_temp_metrics["inbound_throughput"] * 8) / duration)
+    igmp_temp_metrics["outbound_throughput"] = ((igmp_temp_metrics["outbound_throughput"] * 8) / duration)
     igmp_temp_metrics["packets_per_second"] = (igmp_temp_metrics["inbound_packets"] + igmp_temp_metrics["outbound_packets"]) / duration
 
     # Packet Loss 
@@ -1049,10 +1033,10 @@ def calculate_metrics():
     # IP Metrics values 
     ipv4_temp_metrics["packets_per_second"] = (ipv4_temp_metrics["inbound_packets"] + ipv4_temp_metrics["outbound_packets"]) / duration
     ipv6_temp_metrics["packets_per_second"] = (ipv6_temp_metrics["inbound_packets"] + ipv6_temp_metrics["outbound_packets"]) / duration
-    ipv4_temp_metrics["inbound_throughput"] = ((ipv4_temp_metrics["inbound_throughput"] * 8) / duration) / 1000000
-    ipv4_temp_metrics["outbound_throughput"] = ((ipv4_temp_metrics["outbound_throughput"] * 8) / duration) / 1000000
-    ipv6_temp_metrics["inbound_throughput"] = ((ipv6_temp_metrics["inbound_throughput"] * 8) / duration) / 1000000
-    ipv6_temp_metrics["outbound_throughput"] = ((ipv6_temp_metrics["outbound_throughput"] * 8) / duration) / 1000000
+    ipv4_temp_metrics["inbound_throughput"] = ((ipv4_temp_metrics["inbound_throughput"] * 8) / duration)
+    ipv4_temp_metrics["outbound_throughput"] = ((ipv4_temp_metrics["outbound_throughput"] * 8) / duration)
+    ipv6_temp_metrics["inbound_throughput"] = ((ipv6_temp_metrics["inbound_throughput"] * 8) / duration)
+    ipv6_temp_metrics["outbound_throughput"] = ((ipv6_temp_metrics["outbound_throughput"] * 8) / duration)
     ip_temp_composition["ipv4_packets"] = ipv4_temp_metrics["inbound_packets"] + ipv4_temp_metrics["outbound_packets"]
     ip_temp_composition["ipv6_packets"] = ipv6_temp_metrics["inbound_packets"] + ipv6_temp_metrics["outbound_packets"]
     ip_temp_composition["total_packets"] = ip_temp_composition["ipv4_packets"] + ip_temp_composition["ipv6_packets"]
@@ -1090,6 +1074,19 @@ def calculate_metrics():
         "totalPackets": total_packets,
         "packets_per_second": total_packets / max(1, shared_state.capture_duration)
     })
+
+    for metrics in [
+        tcp_temp_metrics,
+        rtp_temp_metrics,
+        udp_temp_metrics,
+        quic_temp_metrics,
+        dns_temp_metrics,
+        igmp_temp_metrics,
+        ipv4_temp_metrics,
+        ipv6_temp_metrics,
+    ]:
+        metrics.pop("inbound_packets",None)
+        metrics.pop("outbound_packets",None)
 
     # Update Protocols and IP Metrics 
     shared_state.tcp_metrics = tcp_temp_metrics
