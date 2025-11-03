@@ -6,6 +6,7 @@ import re
 import psutil
 import socket
 import asyncio
+import app_detector
 
 
 # Map IP protocol numbers to names -> Global Object
@@ -122,6 +123,15 @@ async def start_tshark(interface = "1"):
             "-e", "ipv6.nxt",
             "-e", "tcp.len",        
             "-e", "udp.length",
+            "-e", "tcp.srcport",
+            "-e", "tcp.dstport",
+            "-e", "udp.srcport",
+            "-e", "udp.dstport",
+            "-e", "dns.qry.name",
+            "-e", "dns.a",
+            "-e", "dns.aaaa",
+            "-e", "tls.handshake.extensions_server_name",
+            "-e", "gquic.tag.sni",
             "-E", "separator=|",
             "-E", "occurrence=f",
             "-E", "header=n",
@@ -172,6 +182,8 @@ def resetSharedState():
     shared_state.streams = {}
     shared_state.all_packets_history = []
     shared_state.session_metrics_history = []
+    
+    shared_state.ip_stats = {}
 
     shared_state.tcp_expected_packets_total = 0
     shared_state.tcp_lost_packets_total = 0
@@ -204,8 +216,6 @@ def resetSharedState():
     })
 
     shared_state.tcp_metrics = {
-        "inbound_packets": 0,
-        "outbound_packets": 0,
         "packets_per_second": 0,
         "packet_loss": 0,
         "packet_loss_percentage": 0,
@@ -215,8 +225,6 @@ def resetSharedState():
     }
 
     shared_state.rtp_metrics = {
-        "inbound_packets": 0,
-        "outbound_packets": 0,
         "packets_per_second": 0,
         "packet_loss": 0,
         "packet_loss_percentage": 0,
@@ -226,48 +234,36 @@ def resetSharedState():
     }
 
     shared_state.udp_metrics = {
-        "inbound_packets": 0,
-        "outbound_packets": 0,
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
     }
 
     shared_state.quic_metrics = {
-        "inbound_packets": 0,
-        "outbound_packets": 0,
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
     }
 
     shared_state.dns_metrics = {
-        "inbound_packets": 0,
-        "outbound_packets": 0,
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
     }
 
     shared_state.igmp_metrics = {
-        "inbound_packets": 0,
-        "outbound_packets": 0,
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
     }
 
     shared_state.ipv4_metrics = {
-        "inbound_packets": 0,
-        "outbound_packets": 0,
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
     }
 
     shared_state.ipv6_metrics = {
-        "inbound_packets": 0,
-        "outbound_packets": 0,
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
@@ -305,9 +301,11 @@ async def stop_tshark():
     if shared_state.tshark_proc:
         print("Stopping tshark...")
         try:
+            # 1. Set flag to stop all loops (metrics_calculator, etc.)
             shared_state.capture_active = False
-            await asyncio.sleep(0.2)
-            
+            await asyncio.sleep(0.2) # Give loops a moment to see the flag
+
+            # 2. Terminate the process
             try:
                 shared_state.tshark_proc.terminate()
                 await asyncio.wait_for(shared_state.tshark_proc.wait(), timeout = 3.0)
@@ -317,12 +315,14 @@ async def stop_tshark():
                 shared_state.tshark_proc.kill()
                 await shared_state.tshark_proc.wait()
                 print("Tshark killed")
-                
+
         except Exception as e:
             print(f"Error stopping tshark: {e}")
+            return False, "Error stopping Tshark" # Return False on error
         finally:
-            resetSharedState()            
-            print("Tshark stopped and state reset")
+            # 3. Clear the process variable, but DO NOT reset state here
+            shared_state.tshark_proc = None
+
         return True, "Tshark stopped successfully"
     else:
         print("Tshark was not running")
@@ -412,6 +412,56 @@ async def capture_packets(duration):
                 continue
 
             parts = line.split("|")
+
+            try:
+                # Extract fields by their new index
+                src_ip = parts[2] or parts[16]
+                dst_ip = parts[3] or parts[17]
+                # packet_len = int(parts[4] or 0) # <-- REMOVED
+                protocol = parts[5]
+
+                tcp_srcport = parts[23]
+                tcp_dstport = parts[24]
+                udp_srcport = parts[25]
+                udp_dstport = parts[26]
+
+                src_port = tcp_srcport or udp_srcport
+                dst_port = tcp_dstport or udp_dstport
+
+                dns_query = parts[27]
+                dns_responses = (parts[28] or "") + "," + (parts[29] or "")
+                
+                # Get the new SNI field
+                sni_hostname = parts[30] if len(parts) > 30 else None
+                quic_sni = parts[31] if len(parts) > 31 else None
+
+
+                # Detect the application using the new, prioritized logic
+                app_info = app_detector.detect_application(
+                    src_ip, dst_ip, src_port, dst_port, protocol, 
+                    dns_query, dns_responses, sni_hostname, quic_sni
+                )
+
+                # Update per-IP stats for the map
+                server_ip = dst_ip if dst_ip not in shared_state.ip_address else src_ip
+                if server_ip:
+                    if server_ip not in shared_state.ip_stats:
+                        shared_state.ip_stats[server_ip] = {
+                            # "bytes": 0, # <-- REMOVED
+                            "packets": 0, 
+                            "app_info": app_info
+                        }
+                    
+                    # shared_state.ip_stats[server_ip]["bytes"] += packet_len # <-- REMOVED
+                    shared_state.ip_stats[server_ip]["packets"] += 1
+                    
+                    if app_info['app'] != 'Unknown':
+                         if shared_state.ip_stats[server_ip]["app_info"]['app'] == 'Unknown' or \
+                            shared_state.ip_stats[server_ip]["app_info"]['category'] == 'Web':
+                           shared_state.ip_stats[server_ip]["app_info"] = app_info
+
+            except (IndexError, ValueError) as e:
+                pass
            
             formatted_packet = parse_and_store_packet(parts)
             if formatted_packet:
