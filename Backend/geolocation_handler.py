@@ -4,6 +4,7 @@ from ipaddress import ip_address
 import shared_state
 import time
 import socket
+from static_geolocation_db import STATIC_GEOLOCATION_DB
 
 # Rate limiting
 last_api_call_time = 0
@@ -22,8 +23,9 @@ def is_public_ip(ip_str):
 async def fetch_geolocation(session, ip):
     """Fetch geolocation and rDNS data for a single IP"""
     global last_api_call_time
-
     hostname = None
+
+    # Get rDNS hostname
     try:
         loop = asyncio.get_running_loop()
         dns_lookup_task = loop.run_in_executor(None, socket.gethostbyaddr, ip)
@@ -35,6 +37,20 @@ async def fetch_geolocation(session, ip):
         print(f"Error during rDNS lookup for {ip}: {e}")
         hostname = None
 
+    # CHECK STATIC DATABASE FIRST and if not found here
+    # then only make API Call
+    if ip in STATIC_GEOLOCATION_DB:
+        static_data = STATIC_GEOLOCATION_DB[ip]
+        geo_data = {
+            "ip": ip,
+            "latitude": static_data['lat'],
+            "longitude": static_data['long'],
+            "city": static_data['city'],
+            "country": static_data['country'],
+            "hostname": hostname,
+        }
+        return geo_data
+    
     try:
         current_time = time.time()
         time_since_last = current_time - last_api_call_time
