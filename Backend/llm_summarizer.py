@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 import shared_state
+from datetime import datetime
 
 # --- AI Setup ---
 load_dotenv()
@@ -12,22 +13,12 @@ if GEMINI_API_KEY:
 else:
     print("WARNING: GEMINI_API_KEY not found. AI summary will be disabled.")
 
-# --- Helper Functions for Pre-Calculation ---
-
-def _calculate_average(values):
-    """Safely calculates the average of a list of numbers."""
-    if not values:
-        return 0
-    # Filter out None or non-numeric types before summing
-    numeric_values = [v for v in values if isinstance(v, (int, float))]
-    if not numeric_values:
-        return 0
-    return sum(numeric_values) / len(numeric_values) # Return raw average
 
 def _format_throughput(bits):
     """Converts raw bits to a human-readable string with the best unit."""
     if bits == 0:
         return "0.0 bps"
+    
     gbps = 1_000_000_000
     mbps = 1_000_000
     kbps = 1_000
@@ -40,37 +31,35 @@ def _format_throughput(bits):
         return f"{round(bits / kbps, 2)} Kbps"
     else:
         return f"{round(bits, 2)} bps"
+    
 
-def analyze_protocol_performance(history, special_metrics=None):
-    """Analyzes a protocol's history for throughputs and special metrics like latency or jitter."""
+def analyze_protocol_performance(protocol_metrics, special_metrics=None):
+    """
+    Analyzes protocol performance using pre-calculated averages from _running_state.
+    No history arrays needed.
+    """
     if special_metrics is None:
         special_metrics = []
-    if not history:
-        analysis = {'average_inbound_throughput': '0.0 bps', 'average_outbound_throughput': '0.0 bps'}
-        for metric in special_metrics:
-            analysis[f'average_{metric}_ms'] = 0.0
-        return analysis
 
-    inbound = [m.get('inbound_throughput', 0) for m in history]
-    outbound = [m.get('outbound_throughput', 0) for m in history]
-    
-    # Get raw averages first, then format
-    avg_inbound_bits = _calculate_average(inbound)
-    avg_outbound_bits = _calculate_average(outbound)
-    
+    # Get averages directly from protocol_metrics (which has _peak and _avg fields)
     analysis = {
-        'average_inbound_throughput': _format_throughput(avg_inbound_bits),
-        'average_outbound_throughput': _format_throughput(avg_outbound_bits),
+        'average_inbound_throughput': _format_throughput(
+            protocol_metrics.get('inbound_throughput_avg', 0)
+        ),
+        'average_outbound_throughput': _format_throughput(
+            protocol_metrics.get('outbound_throughput_avg', 0)
+        ),
     }
-    
+
+    # Add special metrics (latency/jitter) if present
     for metric in special_metrics:
-        values = [m.get(metric, 0) for m in history if m.get(metric) is not None]
-        # Return raw average for latency/jitter, will be formatted later
-        analysis[f'average_{metric}_ms'] = round(_calculate_average(values), 2)
+        avg_value = protocol_metrics.get(f'{metric}_avg', 0)
+        analysis[f'average_{metric}_ms'] = round(avg_value, 2)
+
     return analysis
+    
 
 # --- Main Summary Generator ---
-
 async def generate_summary():
     """
     Generates a network session summary by pre-calculating all metrics
@@ -78,27 +67,31 @@ async def generate_summary():
     """
     if not GEMINI_API_KEY:
         return {"summary": "AI summary is unavailable. API key is not configured.", "breakdown": []}
-    if not shared_state.session_metrics_history:
+    
+    if not hasattr(shared_state, 'session_start_time') or shared_state.session_start_time is None:
         return {"summary": "No data was captured to generate a summary.", "breakdown": []}
 
     # 1. Get Session Duration and Final Packet Distribution
-    duration = shared_state.session_duration_final if hasattr(shared_state, 'session_duration_final') and shared_state.session_duration_final > 0 else len(shared_state.session_metrics_history) * shared_state.capture_duration
-    final_distribution = shared_state.session_metrics_history[-1].get("protocol_distribution", {})
+    duration = shared_state.session_duration_final if hasattr(shared_state, 'session_duration_final') and shared_state.session_duration_final > 0 else (datetime.now() - shared_state.session_start_time).total_seconds()
+    final_distribution = shared_state.metrics_state.get("protocol_distribution", {})
     total_packets_overall = sum(final_distribution.values())
 
     # 2. Pre-calculate Overall Throughput and Goodput
-    overall_in_thr = [m.get('inbound_throughput', 0) for m in shared_state.session_metrics_history]
-    overall_out_thr = [m.get('outbound_throughput', 0) for m in shared_state.session_metrics_history]
-    overall_in_good = [m.get('inbound_goodput', 0) for m in shared_state.session_metrics_history]
-    overall_out_good = [m.get('outbound_goodput', 0) for m in shared_state.session_metrics_history]
-    
     overall_throughput_data = {
         "total_packets": total_packets_overall,
         "average_pps": f"{round(total_packets_overall / duration, 2) if duration > 0 else 0} PPS",
-        "average_inbound_throughput": _format_throughput(_calculate_average(overall_in_thr)),
-        "average_outbound_throughput": _format_throughput(_calculate_average(overall_out_thr)),
-        "average_inbound_goodput": _format_throughput(_calculate_average(overall_in_good)),
-        "average_outbound_goodput": _format_throughput(_calculate_average(overall_out_good)),
+        "average_inbound_throughput": _format_throughput(
+            shared_state.metrics_state.get('inbound_throughput_avg', 0)
+        ),
+        "average_outbound_throughput": _format_throughput(
+            shared_state.metrics_state.get('outbound_throughput_avg', 0)
+        ),
+        "average_inbound_goodput": _format_throughput(
+            shared_state.metrics_state.get('inbound_goodput_avg', 0)
+        ),
+        "average_outbound_goodput": _format_throughput(
+            shared_state.metrics_state.get('outbound_goodput_avg', 0)
+        ),
     }
 
     # 3. Use final cumulative IP Composition values directly from shared_state
@@ -133,12 +126,12 @@ async def generate_summary():
 
     # 5. Pre-calculate all performance metrics for each protocol
     protocol_map = {
-        'TCP': (analyze_protocol_performance(shared_state.tcp_metrics_history, ['latency']), shared_state.tcp_metrics),
-        'RTP': (analyze_protocol_performance(shared_state.rtp_metrics_history, ['jitter']), shared_state.rtp_metrics),
-        'UDP': (analyze_protocol_performance(shared_state.udp_metrics_history), shared_state.udp_metrics),
-        'QUIC': (analyze_protocol_performance(shared_state.quic_metrics_history), shared_state.quic_metrics),
-        'DNS': (analyze_protocol_performance(shared_state.dns_metrics_history), shared_state.dns_metrics),
-        'IGMP': (analyze_protocol_performance(shared_state.igmp_metrics_history), shared_state.igmp_metrics),
+        'TCP': (analyze_protocol_performance(shared_state.tcp_metrics, ['latency']), shared_state.tcp_metrics),
+        'RTP': (analyze_protocol_performance(shared_state.rtp_metrics, ['jitter']), shared_state.rtp_metrics),
+        'UDP': (analyze_protocol_performance(shared_state.udp_metrics), shared_state.udp_metrics),
+        'QUIC': (analyze_protocol_performance(shared_state.quic_metrics), shared_state.quic_metrics),
+        'DNS': (analyze_protocol_performance(shared_state.dns_metrics), shared_state.dns_metrics),
+        'IGMP': (analyze_protocol_performance(shared_state.igmp_metrics), shared_state.igmp_metrics),
     }
     protocol_data = {}
     for proto_name, (analysis_data, final_metrics) in protocol_map.items():

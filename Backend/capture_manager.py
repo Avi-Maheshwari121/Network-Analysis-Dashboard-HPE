@@ -156,8 +156,8 @@ async def start_tshark(interface = "1"):
                 )
                 error_msg = stderr_output.decode()
                 print(f"Tshark failed to start: {error_msg}")
-            except:
-                error_msg = "Unknown error"
+            except Exception as e:
+                error_msg = e
             shared_state.tshark_proc = None
             return False, f"Failed to start tshark on interface {interface}: {error_msg}"
         
@@ -178,13 +178,11 @@ async def start_tshark(interface = "1"):
 def resetSharedState():
     shared_state.tshark_proc = None
     shared_state.capture_active = False
+    shared_state.session_start_time = None
 
     shared_state.streams = {}
     shared_state.all_packets_history = []
-    shared_state.session_metrics_history = []
     
-    shared_state.ip_stats = {}
-
     shared_state.tcp_expected_packets_total = 0
     shared_state.tcp_lost_packets_total = 0
     shared_state.rtp_expected_packets_total = 0
@@ -199,6 +197,7 @@ def resetSharedState():
         "TLS": 0,
         "QUIC": 0,
         "DNS": 0,
+        "IGMP": 0,
         "Others": 0
     }
     
@@ -212,61 +211,105 @@ def resetSharedState():
         "protocol_distribution": shared_state.protocol_distribution,
         "streamCount": 0,
         "totalPackets": 0,
-        "packets_per_second": 0
+        "packets_per_second": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "inbound_goodput_peak": 0.0,
+        "inbound_goodput_avg": 0.0,
+        "outbound_goodput_peak": 0.0,
+        "outbound_goodput_avg": 0.0
     })
 
     shared_state.tcp_metrics = {
         "packets_per_second": 0,
         "packet_loss": 0,
-        "packet_loss_percentage": 0,
+        "packet_loss_percentage": 0.0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
         "latency": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "latency_peak": 0.0,
+        "latency_avg": 0.0
     }
 
     shared_state.rtp_metrics = {
         "packets_per_second": 0,
         "packet_loss": 0,
-        "packet_loss_percentage": 0,
+        "packet_loss_percentage": 0.0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
         "jitter": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "jitter_peak": 0.0,
+        "jitter_avg": 0.0
     }
 
     shared_state.udp_metrics = {
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0
     }
 
     shared_state.quic_metrics = {
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0
     }
 
     shared_state.dns_metrics = {
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0
     }
 
     shared_state.igmp_metrics = {
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0
     }
 
     shared_state.ipv4_metrics = {
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0
     }
 
     shared_state.ipv6_metrics = {
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0
     }
 
     shared_state.ip_composition = {
@@ -275,8 +318,8 @@ def resetSharedState():
         "ipv4_packets_cumulative": 0,
         "ipv6_packets_cumulative": 0,
         "total_packets": 0,
-        "ipv4_percentage": 0,
-        "ipv6_percentage": 0
+        "ipv4_percentage": 0.0,
+        "ipv6_percentage": 0.0
     }
 
     shared_state.encryption_composition = {
@@ -285,8 +328,8 @@ def resetSharedState():
         "encrypted_packets_cumulative": 0,
         "unencrypted_packets_cumulative": 0,
         "total_packets": 0,
-        "encrypted_percentage": 0,
-        "unencrypted_percentage": 0
+        "encrypted_percentage": 0.0,
+        "unencrypted_percentage": 0.0
     }
 
     shared_state.top_talkers_cumulative = {}
@@ -294,6 +337,115 @@ def resetSharedState():
 
     shared_state.queried_public_ips = set()
     shared_state.new_geolocations = []
+
+    shared_state.ip_stats = {}
+
+    shared_state.running_state = {
+
+        'overall': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'inbound_goodput_peak': 0.0,
+            'inbound_goodput_sum': 0.0,
+            'inbound_goodput_avg': 0.0,
+            'outbound_goodput_peak': 0.0,
+            'outbound_goodput_sum': 0.0,
+            'outbound_goodput_avg': 0.0,
+            'cumulative_duration': 0
+        },
+        
+        'tcp': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'latency_peak': 0.0,
+            'latency_sum': 0.0,
+            'latency_avg': 0.0,
+            'latency_count': 0,
+            'cumulative_duration': 0
+        },
+        
+        'udp': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'cumulative_duration': 0
+        },
+        
+        'rtp': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'jitter_peak': 0.0,
+            'jitter_sum': 0.0,
+            'jitter_avg': 0.0,
+            'jitter_count': 0,
+            'cumulative_duration': 0
+        },
+        
+        'quic': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'cumulative_duration': 0
+        },
+        
+        'dns': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'cumulative_duration': 0
+        },
+        
+        'igmp': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'cumulative_duration': 0
+        },
+        
+        'ipv4': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'cumulative_duration': 0
+        },
+        
+        'ipv6': {
+            'inbound_throughput_peak': 0.0,
+            'inbound_throughput_sum': 0.0,
+            'inbound_throughput_avg': 0.0,
+            'outbound_throughput_peak': 0.0,
+            'outbound_throughput_sum': 0.0,
+            'outbound_throughput_avg': 0.0,
+            'cumulative_duration': 0
+        }
+    }
 
 
 async def stop_tshark():
@@ -315,6 +467,8 @@ async def stop_tshark():
                 shared_state.tshark_proc.kill()
                 await shared_state.tshark_proc.wait()
                 print("Tshark killed")
+            except Exception as e:
+                print(e)
 
         except Exception as e:
             print(f"Error stopping tshark: {e}")
@@ -400,8 +554,8 @@ async def capture_packets(duration):
                     shared_state.tshark_proc.stdout.readline(),
                     timeout = 1.0
                 )
-            except asyncio.TimeoutError:
-                # No data available, continue loop
+            except Exception as e:
+                print(e)
                 continue
             
             if not line_bytes:
@@ -417,7 +571,6 @@ async def capture_packets(duration):
                 # Extract fields by their new index
                 src_ip = parts[2] or parts[16]
                 dst_ip = parts[3] or parts[17]
-                # packet_len = int(parts[4] or 0) # <-- REMOVED
                 protocol = parts[5]
 
                 tcp_srcport = parts[23]
@@ -432,9 +585,8 @@ async def capture_packets(duration):
                 dns_responses = (parts[28] or "") + "," + (parts[29] or "")
                 
                 # Get the new SNI field
-                sni_hostname = parts[30] if len(parts) > 30 else None
-                quic_sni = parts[31] if len(parts) > 31 else None
-
+                sni_hostname = parts[30] if parts[30] else None
+                quic_sni = parts[31] if parts[31] else None
 
                 # Detect the application using the new, prioritized logic
                 app_info = app_detector.detect_application(
@@ -447,12 +599,10 @@ async def capture_packets(duration):
                 if server_ip:
                     if server_ip not in shared_state.ip_stats:
                         shared_state.ip_stats[server_ip] = {
-                            # "bytes": 0, # <-- REMOVED
                             "packets": 0, 
                             "app_info": app_info
                         }
                     
-                    # shared_state.ip_stats[server_ip]["bytes"] += packet_len # <-- REMOVED
                     shared_state.ip_stats[server_ip]["packets"] += 1
                     
                     if app_info['app'] != 'Unknown':
@@ -460,8 +610,8 @@ async def capture_packets(duration):
                             shared_state.ip_stats[server_ip]["app_info"]['category'] == 'Web':
                            shared_state.ip_stats[server_ip]["app_info"] = app_info
 
-            except (IndexError, ValueError) as e:
-                pass
+            except Exception as e:
+                print(e)
            
             formatted_packet = parse_and_store_packet(parts)
             if formatted_packet:

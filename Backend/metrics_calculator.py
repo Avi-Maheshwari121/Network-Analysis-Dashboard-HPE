@@ -40,6 +40,119 @@ STATIC_PAYLOAD_RATES = {
 }
 
 
+def update_running_metrics(protocol_key, temp_metrics, 
+                           inbound_bytes=0, outbound_bytes=0,
+                           latency_value=0, jitter_value=0,
+                           inbound_goodput_bytes=0, outbound_goodput_bytes=0, current_duration = 0):
+    """
+    Update peak and average values in temp_metrics dictionary.
+    Uses internal running_state for cumulative tracking and peak storage.
+
+    Args:
+        protocol_key: 'overall', 'tcp', 'udp', 'rtp', 'quic', 'dns', 'igmp', 'ipv4', 'ipv6'
+        temp_metrics: Temporary metrics dict to update with peak/avg values
+        inbound_bytes: Bytes for inbound throughput calculation
+        outbound_bytes: Bytes for outbound throughput calculation
+        latency_value: Current latency value in ms (for TCP)
+        jitter_value: Current jitter value in ms (for RTP)
+        inbound_goodput_bytes: Bytes for inbound goodput calculation 
+        outbound_goodput_bytes: Bytes for outbound goodput calculation 
+    """
+    if protocol_key not in shared_state.running_state:
+        return
+
+    # Get inbound and outbound bits 
+    inbound_bits = inbound_bytes * 8
+    outbound_bits = outbound_bytes * 8
+    inbound_goodput_bits = inbound_goodput_bytes * 8
+    outbound_goodput_bits = outbound_goodput_bytes * 8
+
+    # Calculate throughput in bits/second
+    inbound_bps = (inbound_bytes * 8) / current_duration if inbound_bytes > 0 and current_duration > 0 else 0
+    outbound_bps = (outbound_bytes * 8) / current_duration if outbound_bytes > 0 and current_duration > 0 else 0
+
+    # Calculate goodput in bits/second 
+    inbound_goodput_bps = (inbound_goodput_bytes * 8) / current_duration if inbound_goodput_bytes > 0 and current_duration > 0 else 0
+    outbound_goodput_bps = (outbound_goodput_bytes * 8) / current_duration if outbound_goodput_bytes > 0 and current_duration > 0 else 0
+
+    # UPDATE INBOUND THROUGHPUT
+
+    shared_state.running_state[protocol_key]['cumulative_duration'] += current_duration
+
+    if inbound_bps > 0:
+        # Update peak in state
+        if inbound_bps > shared_state.running_state[protocol_key]['inbound_throughput_peak']:
+            shared_state.running_state[protocol_key]['inbound_throughput_peak'] = inbound_bps
+
+        # Update sum and count
+        shared_state.running_state[protocol_key]['inbound_throughput_sum'] += inbound_bits
+
+    if shared_state.running_state[protocol_key]['cumulative_duration'] > 0:
+        shared_state.running_state[protocol_key]['inbound_throughput_avg'] = shared_state.running_state[protocol_key]['inbound_throughput_sum'] / shared_state.running_state[protocol_key]['cumulative_duration']
+
+    # UPDATE OUTBOUND THROUGHPUT
+    if outbound_bps > 0:
+        # Update peak in state
+        if outbound_bps > shared_state.running_state[protocol_key]['outbound_throughput_peak']:
+            shared_state.running_state[protocol_key]['outbound_throughput_peak'] = outbound_bps
+
+        # Update sum (count already updated above)
+        shared_state.running_state[protocol_key]['outbound_throughput_sum'] += outbound_bits
+
+    if shared_state.running_state[protocol_key]['cumulative_duration'] > 0:
+        shared_state.running_state[protocol_key]['outbound_throughput_avg'] = shared_state.running_state[protocol_key]['outbound_throughput_sum'] / shared_state.running_state[protocol_key]['cumulative_duration']
+
+    # UPDATE INBOUND GOODPUT
+    if protocol_key == 'overall' and 'inbound_goodput_peak' in shared_state.running_state[protocol_key]:
+        if inbound_goodput_bps > 0:
+            if inbound_goodput_bps > shared_state.running_state[protocol_key]['inbound_goodput_peak']:
+                shared_state.running_state[protocol_key]['inbound_goodput_peak'] = inbound_goodput_bps
+
+            shared_state.running_state[protocol_key]['inbound_goodput_sum'] += inbound_goodput_bits
+
+        if shared_state.running_state[protocol_key]['cumulative_duration'] > 0:
+            shared_state.running_state[protocol_key]['inbound_goodput_avg'] = shared_state.running_state[protocol_key]['inbound_goodput_sum'] / shared_state.running_state[protocol_key]['cumulative_duration']
+
+    # UPDATE OUTBOUND GOODPUT
+    if protocol_key == 'overall' and 'outbound_goodput_peak' in shared_state.running_state[protocol_key]:
+        if outbound_goodput_bps > 0:
+            if outbound_goodput_bps > shared_state.running_state[protocol_key]['outbound_goodput_peak']:
+                shared_state.running_state[protocol_key]['outbound_goodput_peak'] = outbound_goodput_bps
+
+            shared_state.running_state[protocol_key]['outbound_goodput_sum'] += outbound_goodput_bits
+
+        if shared_state.running_state[protocol_key]['cumulative_duration'] > 0:
+            shared_state.running_state[protocol_key]['outbound_goodput_avg'] = shared_state.running_state[protocol_key]['outbound_goodput_sum'] / shared_state.running_state[protocol_key]['cumulative_duration']
+
+    # UPDATE LATENCY (TCP only)
+    if 'latency_peak' in temp_metrics:
+        if latency_value > 0:
+            # Update peak in state
+            if latency_value > shared_state.running_state[protocol_key].get('latency_peak', 0):
+                shared_state.running_state[protocol_key]['latency_peak'] = latency_value
+
+            # Update sum and count
+            shared_state.running_state[protocol_key]['latency_sum'] = shared_state.running_state[protocol_key].get('latency_sum', 0) + latency_value
+            shared_state.running_state[protocol_key]['latency_count'] = shared_state.running_state[protocol_key].get('latency_count', 0) + 1
+
+        if shared_state.running_state[protocol_key].get('latency_count', 0) > 0:
+            shared_state.running_state[protocol_key]['latency_avg'] = shared_state.running_state[protocol_key]['latency_sum'] / shared_state.running_state[protocol_key]['latency_count']
+
+    # UPDATE JITTER (RTP only) 
+    if 'jitter_peak' in temp_metrics:
+        if jitter_value > 0:
+            # Update peak in state
+            if jitter_value > shared_state.running_state[protocol_key].get('jitter_peak', 0):
+                shared_state.running_state[protocol_key]['jitter_peak'] = jitter_value
+
+            # Update sum and count
+            shared_state.running_state[protocol_key]['jitter_sum'] = shared_state.running_state[protocol_key].get('jitter_sum', 0) + jitter_value
+            shared_state.running_state[protocol_key]['jitter_count'] = shared_state.running_state[protocol_key].get('jitter_count', 0) + 1
+
+        if shared_state.running_state[protocol_key].get('jitter_count', 0) > 0:
+            shared_state.running_state[protocol_key]['jitter_avg'] = shared_state.running_state[protocol_key]['jitter_sum'] / shared_state.running_state[protocol_key]['jitter_count']
+
+
 def update_top_talkers(source_ip, dest_ip, packet_length):
     """ Update cumulative top talkers statistics.
     Only tracks when source IP is from device (outbound traffic)."""
@@ -106,6 +219,8 @@ def get_protocol_category(protocol_name):
         return "DNS"
     elif "TLS" in protocol:  # matches TLSV1.2, TLSV1.3, etc.
         return "TLS"
+    elif "IGMP" in protocol:
+        return "IGMP"
     else:
         return "Others"
     
@@ -179,41 +294,41 @@ def calculate_metrics():
             "jitter": 0,
         })
 
-        shared_state.udp_metrics = {
+        shared_state.udp_metrics.update({
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
-        }
+        })
 
-        shared_state.quic_metrics = {
+        shared_state.quic_metrics.update({
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
-        }
+        })
 
-        shared_state.dns_metrics = {
+        shared_state.dns_metrics.update({
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
-        }
+        })
 
-        shared_state.igmp_metrics = {
+        shared_state.igmp_metrics.update({
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
-        }
-        
-        shared_state.ipv4_metrics = {
-            "packets_per_second": 0,
-            "inbound_throughput": 0,
-            "outbound_throughput": 0,
-        }
+        })
 
-        shared_state.ipv6_metrics = {
+        shared_state.ipv4_metrics.update({
             "packets_per_second": 0,
             "inbound_throughput": 0,
             "outbound_throughput": 0,
-        }
+        })
+
+        shared_state.ipv6_metrics.update({
+            "packets_per_second": 0,
+            "inbound_throughput": 0,
+            "outbound_throughput": 0,
+        })
 
         shared_state.ip_composition.update({
             "ipv4_packets": 0,
@@ -226,6 +341,8 @@ def calculate_metrics():
             "encrypted_packets": 0,
             "unencrypted_packets": 0
         })
+
+        return
 
     # Throughput calculation
     inbound_bytes = 0
@@ -262,10 +379,18 @@ def calculate_metrics():
         "outbound_packets": 0,
         "packets_per_second": 0,
         "packet_loss": 0,
-        "packet_loss_percentage": 0,
+        "packet_loss_percentage": 0.0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
         "latency": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "latency_peak": 0.0,
+        "latency_avg": 0.0,
+        "inbound_bytes": 0.0,
+        "outbound_bytes": 0.0
     }
 
     rtp_temp_metrics = {
@@ -273,10 +398,18 @@ def calculate_metrics():
         "outbound_packets": 0,
         "packets_per_second": 0,
         "packet_loss": 0,
-        "packet_loss_percentage": 0,
+        "packet_loss_percentage": 0.0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
         "jitter": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "jitter_peak": 0.0,
+        "jitter_avg": 0.0,
+        "inbound_bytes": 0.0,
+        "outbound_bytes": 0.0
     }
 
     udp_temp_metrics = {
@@ -285,6 +418,12 @@ def calculate_metrics():
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "inbound_bytes": 0.0,
+        "outbound_bytes": 0.0
     }
 
     quic_temp_metrics = {
@@ -293,6 +432,12 @@ def calculate_metrics():
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "inbound_bytes": 0.0,
+        "outbound_bytes": 0.0
     }
 
     dns_temp_metrics = {
@@ -301,6 +446,12 @@ def calculate_metrics():
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "inbound_bytes": 0.0,
+        "outbound_bytes": 0.0
     }
 
     igmp_temp_metrics = {
@@ -309,6 +460,12 @@ def calculate_metrics():
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "inbound_bytes": 0.0,
+        "outbound_bytes": 0.0
     }
 
     ipv4_temp_metrics = {
@@ -317,6 +474,12 @@ def calculate_metrics():
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "inbound_bytes": 0.0,
+        "outbound_bytes": 0.0
     }
 
     ipv6_temp_metrics = {
@@ -325,6 +488,12 @@ def calculate_metrics():
         "packets_per_second": 0,
         "inbound_throughput": 0,
         "outbound_throughput": 0,
+        "inbound_throughput_peak": 0.0,
+        "inbound_throughput_avg": 0.0,
+        "outbound_throughput_peak": 0.0,
+        "outbound_throughput_avg": 0.0,
+        "inbound_bytes": 0.0,
+        "outbound_bytes": 0.0
     }
 
     ip_temp_composition = {
@@ -333,8 +502,8 @@ def calculate_metrics():
         "ipv4_packets_cumulative": shared_state.ip_composition["ipv4_packets_cumulative"],
         "ipv6_packets_cumulative": shared_state.ip_composition["ipv6_packets_cumulative"],
         "total_packets": 0,
-        "ipv4_percentage": 0,
-        "ipv6_percentage": 0
+        "ipv4_percentage": 0.0,
+        "ipv6_percentage": 0.0
     }
     encryption_temp_composition = {
         "encrypted_packets": 0,
@@ -389,34 +558,42 @@ def calculate_metrics():
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         tcp_temp_metrics["outbound_packets"] += 1
-                        tcp_temp_metrics["outbound_throughput"] += length
+                        tcp_temp_metrics["outbound_bytes"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
-                        ipv4_temp_metrics["outbound_throughput"] += length
-                        if not ((retrans != "0" or fast_retrans != "0") and spurious == "0"):
+                        ipv4_temp_metrics["outbound_bytes"] += length
+                        
+                        is_retransmitted = (retrans != "0" or fast_retrans != "0") and spurious == "0"
+                        if not is_retransmitted:
                             outbound_goodput_bytes += payload_len
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         tcp_temp_metrics["outbound_packets"] += 1
-                        tcp_temp_metrics["outbound_throughput"] += length
+                        tcp_temp_metrics["outbound_bytes"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
-                        ipv6_temp_metrics["outbound_throughput"] += length
-                        if not ((retrans != "0" or fast_retrans != "0") and spurious == "0"):
+                        ipv6_temp_metrics["outbound_bytes"] += length
+                        
+                        is_retransmitted = (retrans != "0" or fast_retrans != "0") and spurious == "0"
+                        if not is_retransmitted:
                             outbound_goodput_bytes += payload_len
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         tcp_temp_metrics["inbound_packets"] += 1
-                        tcp_temp_metrics["inbound_throughput"] += length
+                        tcp_temp_metrics["inbound_bytes"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
-                        ipv4_temp_metrics["inbound_throughput"] += length
-                        if not ((retrans != "0" or fast_retrans != "0") and spurious == "0"):
+                        ipv4_temp_metrics["inbound_bytes"] += length
+                        
+                        is_retransmitted = (retrans != "0" or fast_retrans != "0") and spurious == "0"
+                        if not is_retransmitted:
                             inbound_goodput_bytes += payload_len
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         tcp_temp_metrics["inbound_packets"] += 1
-                        tcp_temp_metrics["inbound_throughput"] += length
+                        tcp_temp_metrics["inbound_bytes"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
-                        ipv6_temp_metrics["inbound_throughput"] += length
-                        if not ((retrans != "0" or fast_retrans != "0") and spurious == "0"):
+                        ipv6_temp_metrics["inbound_bytes"] += length
+                        
+                        is_retransmitted = (retrans != "0" or fast_retrans != "0") and spurious == "0"
+                        if not is_retransmitted:
                             inbound_goodput_bytes += payload_len
                     
                     if time_rel >= 0:
@@ -437,7 +614,7 @@ def calculate_metrics():
                     is_encrypted = False
 
                     # Define encrypted protocols 
-                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    encrypted_protocols = ["TLS", "SSL", "DTLS", "QUIC", "SSH", "IPSEC", "ESP", "AH", "HTTPS", "SKYPE", "SMTPS", "IMAPS", "POP3S", "FTPS", "SFTP", "SRTP", "LDAPS", "DNSSEC"]
                     if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
                         is_encrypted = True
 
@@ -511,30 +688,30 @@ def calculate_metrics():
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         rtp_temp_metrics["outbound_packets"] += 1
-                        rtp_temp_metrics["outbound_throughput"] += length
+                        rtp_temp_metrics["outbound_bytes"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
-                        ipv4_temp_metrics["outbound_throughput"] += length
+                        ipv4_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"] - HEADER_SIZES["rtp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         rtp_temp_metrics["outbound_packets"] += 1
-                        rtp_temp_metrics["outbound_throughput"] += length
+                        rtp_temp_metrics["outbound_bytes"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
-                        ipv6_temp_metrics["outbound_throughput"] += length
+                        ipv6_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"] - HEADER_SIZES["rtp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         rtp_temp_metrics["inbound_packets"] += 1
-                        rtp_temp_metrics["inbound_throughput"] += length
+                        rtp_temp_metrics["inbound_bytes"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
-                        ipv4_temp_metrics["inbound_throughput"] += length
+                        ipv4_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"] - HEADER_SIZES["rtp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         rtp_temp_metrics["inbound_packets"] += 1
-                        rtp_temp_metrics["inbound_throughput"] += length
+                        rtp_temp_metrics["inbound_bytes"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
-                        ipv6_temp_metrics["inbound_throughput"] += length
+                        ipv6_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"] - HEADER_SIZES["rtp"])
                     
                     if time_rel > 0:
@@ -604,7 +781,7 @@ def calculate_metrics():
                     protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
                     is_encrypted = False
                     # Define encrypted protocols 
-                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    encrypted_protocols = ["TLS", "SSL", "DTLS", "QUIC", "SSH", "IPSEC", "ESP", "AH", "HTTPS", "SKYPE", "SMTPS", "IMAPS", "POP3S", "FTPS", "SFTP", "SRTP", "LDAPS", "DNSSEC"]
                     if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
                         is_encrypted = True
 
@@ -647,30 +824,30 @@ def calculate_metrics():
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         udp_temp_metrics["outbound_packets"] += 1
-                        udp_temp_metrics["outbound_throughput"] += length
+                        udp_temp_metrics["outbound_bytes"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
-                        ipv4_temp_metrics["outbound_throughput"] += length
+                        ipv4_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         udp_temp_metrics["outbound_packets"] += 1
-                        udp_temp_metrics["outbound_throughput"] += length
+                        udp_temp_metrics["outbound_bytes"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
-                        ipv6_temp_metrics["outbound_throughput"] += length
+                        ipv6_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         udp_temp_metrics["inbound_packets"] += 1
-                        udp_temp_metrics["inbound_throughput"] += length
+                        udp_temp_metrics["inbound_bytes"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
-                        ipv4_temp_metrics["inbound_throughput"] += length
+                        ipv4_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         udp_temp_metrics["inbound_packets"] += 1
-                        udp_temp_metrics["inbound_throughput"] += length
+                        udp_temp_metrics["inbound_bytes"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
-                        ipv6_temp_metrics["inbound_throughput"] += length
+                        ipv6_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     
                     if time_rel > 0:
@@ -686,7 +863,7 @@ def calculate_metrics():
                     protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
                     is_encrypted = False
                     # Define encrypted protocols 
-                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    encrypted_protocols = ["TLS", "SSL", "DTLS", "QUIC", "SSH", "IPSEC", "ESP", "AH", "HTTPS", "SKYPE", "SMTPS", "IMAPS", "POP3S", "FTPS", "SFTP", "SRTP", "LDAPS", "DNSSEC"]
                     if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
                         is_encrypted = True
 
@@ -717,30 +894,30 @@ def calculate_metrics():
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         quic_temp_metrics["outbound_packets"] += 1
-                        quic_temp_metrics["outbound_throughput"] += length
+                        quic_temp_metrics["outbound_bytes"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
-                        ipv4_temp_metrics["outbound_throughput"] += length
+                        ipv4_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         quic_temp_metrics["outbound_packets"] += 1
-                        quic_temp_metrics["outbound_throughput"] += length
+                        quic_temp_metrics["outbound_bytes"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
-                        ipv6_temp_metrics["outbound_throughput"] += length
+                        ipv6_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         quic_temp_metrics["inbound_packets"] += 1
-                        quic_temp_metrics["inbound_throughput"] += length
+                        quic_temp_metrics["inbound_bytes"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
-                        ipv4_temp_metrics["inbound_throughput"] += length
+                        ipv4_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         quic_temp_metrics["inbound_packets"] += 1
-                        quic_temp_metrics["inbound_throughput"] += length
+                        quic_temp_metrics["inbound_bytes"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
-                        ipv6_temp_metrics["inbound_throughput"] += length
+                        ipv6_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     
                     if time_rel > 0:
@@ -756,7 +933,7 @@ def calculate_metrics():
                     protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
                     is_encrypted = False
                     # Define encrypted protocols 
-                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    encrypted_protocols = ["TLS", "SSL", "DTLS", "QUIC", "SSH", "IPSEC", "ESP", "AH", "HTTPS", "SKYPE", "SMTPS", "IMAPS", "POP3S", "FTPS", "SFTP", "SRTP", "LDAPS", "DNSSEC"]
                     if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
                         is_encrypted = True
 
@@ -787,30 +964,30 @@ def calculate_metrics():
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         dns_temp_metrics["outbound_packets"] += 1
-                        dns_temp_metrics["outbound_throughput"] += length
+                        dns_temp_metrics["outbound_bytes"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
-                        ipv4_temp_metrics["outbound_throughput"] += length
+                        ipv4_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         dns_temp_metrics["outbound_packets"] += 1
-                        dns_temp_metrics["outbound_throughput"] += length
+                        dns_temp_metrics["outbound_bytes"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
-                        ipv6_temp_metrics["outbound_throughput"] += length
+                        ipv6_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         dns_temp_metrics["inbound_packets"] += 1
-                        dns_temp_metrics["inbound_throughput"] += length
+                        dns_temp_metrics["inbound_bytes"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
-                        ipv4_temp_metrics["inbound_throughput"] += length
+                        ipv4_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         dns_temp_metrics["inbound_packets"] += 1
-                        dns_temp_metrics["inbound_throughput"] += length
+                        dns_temp_metrics["inbound_bytes"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
-                        ipv6_temp_metrics["inbound_throughput"] += length
+                        ipv6_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
                     
                     if time_rel > 0:
@@ -826,7 +1003,7 @@ def calculate_metrics():
                     protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
                     is_encrypted = False
                     # Define encrypted protocols 
-                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    encrypted_protocols = ["TLS", "SSL", "DTLS", "QUIC", "SSH", "IPSEC", "ESP", "AH", "HTTPS", "SKYPE", "SMTPS", "IMAPS", "POP3S", "FTPS", "SFTP", "SRTP", "LDAPS", "DNSSEC"]
                     if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
                         is_encrypted = True
 
@@ -851,37 +1028,37 @@ def calculate_metrics():
 
                     update_top_talkers(source_ip, destination_ip, length)
 
-                    payload_len_str = pkt[22] if pkt[22] else "0"
+                    payload_len_str = pkt[4] if pkt[4] else "0"
                     payload_len = int(payload_len_str) if payload_len_str else 0
 
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         igmp_temp_metrics["outbound_packets"] += 1
-                        igmp_temp_metrics["outbound_throughput"] += length
+                        igmp_temp_metrics["outbound_bytes"] += length
                         ipv4_temp_metrics["outbound_packets"] += 1
-                        ipv4_temp_metrics["outbound_throughput"] += length
-                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
+                        ipv4_temp_metrics["outbound_bytes"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["ipv4"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         igmp_temp_metrics["outbound_packets"] += 1
-                        igmp_temp_metrics["outbound_throughput"] += length
+                        igmp_temp_metrics["outbound_bytes"] += length
                         ipv6_temp_metrics["outbound_packets"] += 1
-                        ipv6_temp_metrics["outbound_throughput"] += length
-                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
+                        ipv6_temp_metrics["outbound_bytes"] += length
+                        outbound_goodput_bytes += (payload_len - HEADER_SIZES["ipv6"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         igmp_temp_metrics["inbound_packets"] += 1
-                        igmp_temp_metrics["inbound_throughput"] += length
+                        igmp_temp_metrics["inbound_bytes"] += length
                         ipv4_temp_metrics["inbound_packets"] += 1
-                        ipv4_temp_metrics["inbound_throughput"] += length
-                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
+                        ipv4_temp_metrics["inbound_bytes"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["ipv4"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         igmp_temp_metrics["inbound_packets"] += 1
-                        igmp_temp_metrics["inbound_throughput"] += length
+                        igmp_temp_metrics["inbound_bytes"] += length
                         ipv6_temp_metrics["inbound_packets"] += 1
-                        ipv6_temp_metrics["inbound_throughput"] += length
-                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["udp"])
+                        ipv6_temp_metrics["inbound_bytes"] += length
+                        inbound_goodput_bytes += (payload_len - HEADER_SIZES["ipv6"])
                     
                     if time_rel > 0:
                         start_time = min(start_time, time_rel)
@@ -896,7 +1073,7 @@ def calculate_metrics():
                     protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
                     is_encrypted = False
                     # Define encrypted protocols 
-                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    encrypted_protocols = ["TLS", "SSL", "DTLS", "QUIC", "SSH", "IPSEC", "ESP", "AH", "HTTPS", "SKYPE", "SMTPS", "IMAPS", "POP3S", "FTPS", "SFTP", "SRTP", "LDAPS", "DNSSEC"]
                     if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
                         is_encrypted = True
 
@@ -925,22 +1102,22 @@ def calculate_metrics():
                     if(source_ip in shared_state.ipv4_ips):
                         outbound_bytes += length
                         ipv4_temp_metrics["outbound_packets"] += 1
-                        ipv4_temp_metrics["outbound_throughput"] += length
+                        ipv4_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (length - HEADER_SIZES["ipv4"])
                     elif(source_ip in shared_state.ipv6_ips):
                         outbound_bytes += length
                         ipv6_temp_metrics["outbound_packets"] += 1
-                        ipv6_temp_metrics["outbound_throughput"] += length
+                        ipv6_temp_metrics["outbound_bytes"] += length
                         outbound_goodput_bytes += (length - HEADER_SIZES["ipv6"])
                     elif(destination_ip in shared_state.ipv4_ips):
                         inbound_bytes += length
                         ipv4_temp_metrics["inbound_packets"] += 1
-                        ipv4_temp_metrics["inbound_throughput"] += length
+                        ipv4_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (length - HEADER_SIZES["ipv4"])
                     elif(destination_ip in shared_state.ipv6_ips):
                         inbound_bytes += length
                         ipv6_temp_metrics["inbound_packets"] += 1
-                        ipv6_temp_metrics["inbound_throughput"] += length
+                        ipv6_temp_metrics["inbound_bytes"] += length
                         inbound_goodput_bytes += (length - HEADER_SIZES["ipv6"])
                     
                     if time_rel > 0:
@@ -956,7 +1133,7 @@ def calculate_metrics():
                     protocol_name_upper = (pkt[5] or "N/A").upper() # Get protocol name safely
                     is_encrypted = False
                     # Define encrypted protocols 
-                    encrypted_protocols = ["TLS", "SSL", "QUIC", "SSH", "IPSEC", "ESP","SKYPE"] 
+                    encrypted_protocols = ["TLS", "SSL", "DTLS", "QUIC", "SSH", "IPSEC", "ESP", "AH", "HTTPS", "SKYPE", "SMTPS", "IMAPS", "POP3S", "FTPS", "SFTP", "SRTP", "LDAPS", "DNSSEC"]
                     if any(enc_proto in protocol_name_upper for enc_proto in encrypted_protocols):
                         is_encrypted = True
 
@@ -982,32 +1159,32 @@ def calculate_metrics():
 
     # TCP Data
     tcp_temp_metrics["packets_per_second"] = expected_tcp_packets / duration
-    tcp_temp_metrics["inbound_throughput"] = ((tcp_temp_metrics["inbound_throughput"] * 8) / duration)
-    tcp_temp_metrics["outbound_throughput"] = ((tcp_temp_metrics["outbound_throughput"] * 8) / duration)
+    tcp_temp_metrics["inbound_throughput"] = ((tcp_temp_metrics["inbound_bytes"] * 8) / duration)
+    tcp_temp_metrics["outbound_throughput"] = ((tcp_temp_metrics["outbound_bytes"] * 8) / duration)
 
     # RTP Data
-    rtp_temp_metrics["inbound_throughput"] = ((rtp_temp_metrics["inbound_throughput"] * 8) / duration)
-    rtp_temp_metrics["outbound_throughput"] = ((rtp_temp_metrics["outbound_throughput"] * 8) / duration)
+    rtp_temp_metrics["inbound_throughput"] = ((rtp_temp_metrics["inbound_bytes"] * 8) / duration)
+    rtp_temp_metrics["outbound_throughput"] = ((rtp_temp_metrics["outbound_bytes"] * 8) / duration)
     rtp_temp_metrics["packets_per_second"] = (rtp_temp_metrics["inbound_packets"] + rtp_temp_metrics["outbound_packets"]) / duration
 
     # UDP Data
-    udp_temp_metrics["inbound_throughput"] = ((udp_temp_metrics["inbound_throughput"] * 8) / duration)
-    udp_temp_metrics["outbound_throughput"] = ((udp_temp_metrics["outbound_throughput"] * 8) / duration)
+    udp_temp_metrics["inbound_throughput"] = ((udp_temp_metrics["inbound_bytes"] * 8) / duration)
+    udp_temp_metrics["outbound_throughput"] = ((udp_temp_metrics["outbound_bytes"] * 8) / duration)
     udp_temp_metrics["packets_per_second"] = (udp_temp_metrics["inbound_packets"] + udp_temp_metrics["outbound_packets"]) / duration
 
     # QUIC Data
-    quic_temp_metrics["inbound_throughput"] = ((quic_temp_metrics["inbound_throughput"] * 8) / duration)
-    quic_temp_metrics["outbound_throughput"] = ((quic_temp_metrics["outbound_throughput"] * 8) / duration)
+    quic_temp_metrics["inbound_throughput"] = ((quic_temp_metrics["inbound_bytes"] * 8) / duration)
+    quic_temp_metrics["outbound_throughput"] = ((quic_temp_metrics["outbound_bytes"] * 8) / duration)
     quic_temp_metrics["packets_per_second"] = (quic_temp_metrics["inbound_packets"] + quic_temp_metrics["outbound_packets"]) / duration
     
     # DNS Data
-    dns_temp_metrics["inbound_throughput"] = ((dns_temp_metrics["inbound_throughput"] * 8) / duration)
-    dns_temp_metrics["outbound_throughput"] = ((dns_temp_metrics["outbound_throughput"] * 8) / duration)
+    dns_temp_metrics["inbound_throughput"] = ((dns_temp_metrics["inbound_bytes"] * 8) / duration)
+    dns_temp_metrics["outbound_throughput"] = ((dns_temp_metrics["outbound_bytes"] * 8) / duration)
     dns_temp_metrics["packets_per_second"] = (dns_temp_metrics["inbound_packets"] + dns_temp_metrics["outbound_packets"]) / duration
     
     # IGMP Data
-    igmp_temp_metrics["inbound_throughput"] = ((igmp_temp_metrics["inbound_throughput"] * 8) / duration)
-    igmp_temp_metrics["outbound_throughput"] = ((igmp_temp_metrics["outbound_throughput"] * 8) / duration)
+    igmp_temp_metrics["inbound_throughput"] = ((igmp_temp_metrics["inbound_bytes"] * 8) / duration)
+    igmp_temp_metrics["outbound_throughput"] = ((igmp_temp_metrics["outbound_bytes"] * 8) / duration)
     igmp_temp_metrics["packets_per_second"] = (igmp_temp_metrics["inbound_packets"] + igmp_temp_metrics["outbound_packets"]) / duration
 
     # Packet Loss 
@@ -1033,10 +1210,10 @@ def calculate_metrics():
     # IP Metrics values 
     ipv4_temp_metrics["packets_per_second"] = (ipv4_temp_metrics["inbound_packets"] + ipv4_temp_metrics["outbound_packets"]) / duration
     ipv6_temp_metrics["packets_per_second"] = (ipv6_temp_metrics["inbound_packets"] + ipv6_temp_metrics["outbound_packets"]) / duration
-    ipv4_temp_metrics["inbound_throughput"] = ((ipv4_temp_metrics["inbound_throughput"] * 8) / duration)
-    ipv4_temp_metrics["outbound_throughput"] = ((ipv4_temp_metrics["outbound_throughput"] * 8) / duration)
-    ipv6_temp_metrics["inbound_throughput"] = ((ipv6_temp_metrics["inbound_throughput"] * 8) / duration)
-    ipv6_temp_metrics["outbound_throughput"] = ((ipv6_temp_metrics["outbound_throughput"] * 8) / duration)
+    ipv4_temp_metrics["inbound_throughput"] = ((ipv4_temp_metrics["inbound_bytes"] * 8) / duration)
+    ipv4_temp_metrics["outbound_throughput"] = ((ipv4_temp_metrics["outbound_bytes"] * 8) / duration)
+    ipv6_temp_metrics["inbound_throughput"] = ((ipv6_temp_metrics["inbound_bytes"] * 8) / duration)
+    ipv6_temp_metrics["outbound_throughput"] = ((ipv6_temp_metrics["outbound_bytes"] * 8) / duration)
     ip_temp_composition["ipv4_packets"] = ipv4_temp_metrics["inbound_packets"] + ipv4_temp_metrics["outbound_packets"]
     ip_temp_composition["ipv6_packets"] = ipv6_temp_metrics["inbound_packets"] + ipv6_temp_metrics["outbound_packets"]
     ip_temp_composition["total_packets"] = ip_temp_composition["ipv4_packets"] + ip_temp_composition["ipv6_packets"]
@@ -1061,7 +1238,56 @@ def calculate_metrics():
         encryption_temp_composition["encrypted_percentage"] = (encryption_temp_composition["encrypted_packets_cumulative"] * 100) / total_packets_cum
         encryption_temp_composition["unencrypted_percentage"] = (encryption_temp_composition["unencrypted_packets_cumulative"] * 100) / total_packets_cum
 
+    #  UPDATE RUNNING METRICS (PEAK & AVG) 
+    # Overall metrics
+    update_running_metrics('overall', shared_state.metrics_state,
+                          inbound_bytes=inbound_bytes,
+                          outbound_bytes=outbound_bytes,
+                          inbound_goodput_bytes = inbound_goodput_bytes,
+                          outbound_goodput_bytes = outbound_goodput_bytes, current_duration=duration)
 
+    # TCP metrics
+    update_running_metrics('tcp', tcp_temp_metrics,
+                          inbound_bytes=tcp_temp_metrics['inbound_bytes'],
+                          outbound_bytes=tcp_temp_metrics['outbound_bytes'],
+                          latency_value=tcp_temp_metrics['latency'], current_duration=duration)
+
+    # UDP metrics
+    update_running_metrics('udp', udp_temp_metrics,
+                          inbound_bytes=udp_temp_metrics['inbound_bytes'],
+                          outbound_bytes=udp_temp_metrics['outbound_bytes'], current_duration=duration)
+
+    # RTP metrics
+    update_running_metrics('rtp', rtp_temp_metrics,
+                          inbound_bytes=rtp_temp_metrics['inbound_bytes'],
+                          outbound_bytes=rtp_temp_metrics['outbound_bytes'],
+                          jitter_value=rtp_temp_metrics['jitter'], current_duration=duration)
+
+    # QUIC metrics
+    update_running_metrics('quic', quic_temp_metrics,
+                          inbound_bytes=quic_temp_metrics['inbound_bytes'],
+                          outbound_bytes=quic_temp_metrics['outbound_bytes'], current_duration=duration)
+
+    # DNS metrics
+    update_running_metrics('dns', dns_temp_metrics,
+                          inbound_bytes=dns_temp_metrics['inbound_bytes'],
+                          outbound_bytes=dns_temp_metrics['outbound_bytes'], current_duration=duration)
+    
+    # IGMP metrics
+    update_running_metrics('igmp', igmp_temp_metrics,
+                          inbound_bytes=igmp_temp_metrics['inbound_bytes'],
+                          outbound_bytes=igmp_temp_metrics['outbound_bytes'], current_duration=duration)
+
+    # IPv4 metrics
+    update_running_metrics('ipv4', ipv4_temp_metrics,
+                          inbound_bytes=ipv4_temp_metrics['inbound_bytes'],
+                          outbound_bytes=ipv4_temp_metrics['outbound_bytes'], current_duration=duration)
+
+    # IPv6 metrics
+    update_running_metrics('ipv6', ipv6_temp_metrics,
+                          inbound_bytes=ipv6_temp_metrics['inbound_bytes'],
+                          outbound_bytes=ipv6_temp_metrics['outbound_bytes'], current_duration=duration)
+    
     # Update metrics
     shared_state.metrics_state.update({
         "inbound_throughput": in_throughput,
@@ -1072,9 +1298,86 @@ def calculate_metrics():
         "protocol_distribution": shared_state.protocol_distribution,
         "streamCount": streams_count,
         "totalPackets": total_packets,
-        "packets_per_second": total_packets / max(1, shared_state.capture_duration)
+        "packets_per_second": total_packets / max(1, shared_state.capture_duration),
+        "inbound_throughput_peak": shared_state.running_state['overall']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['overall']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['overall']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['overall']["outbound_throughput_avg"],
+        "inbound_goodput_peak": shared_state.running_state['overall']["inbound_goodput_peak"],
+        "inbound_goodput_avg": shared_state.running_state['overall']["inbound_goodput_avg"],
+        "outbound_goodput_peak": shared_state.running_state['overall']["outbound_goodput_peak"],
+        "outbound_goodput_avg": shared_state.running_state['overall']["outbound_goodput_avg"]
     })
 
+    # TCP Metrics - Update from running_state
+    tcp_temp_metrics.update({
+        "inbound_throughput_peak": shared_state.running_state['tcp']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['tcp']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['tcp']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['tcp']["outbound_throughput_avg"],
+        "latency_peak": shared_state.running_state['tcp']["latency_peak"],
+        "latency_avg": shared_state.running_state['tcp']["latency_avg"]
+    })
+
+    # UDP Metrics - Update from running_state
+    udp_temp_metrics.update({
+        "inbound_throughput_peak": shared_state.running_state['udp']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['udp']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['udp']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['udp']["outbound_throughput_avg"]
+    })
+
+    # RTP Metrics - Update from running_state
+    rtp_temp_metrics.update({
+        "inbound_throughput_peak": shared_state.running_state['rtp']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['rtp']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['rtp']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['rtp']["outbound_throughput_avg"],
+        "jitter_peak": shared_state.running_state['rtp']["jitter_peak"],
+        "jitter_avg": shared_state.running_state['rtp']["jitter_avg"]
+    })
+
+    # QUIC Metrics - Update from running_state
+    quic_temp_metrics.update({
+        "inbound_throughput_peak": shared_state.running_state['quic']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['quic']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['quic']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['quic']["outbound_throughput_avg"]
+    })
+
+    # DNS Metrics - Update from running_state
+    dns_temp_metrics.update({
+        "inbound_throughput_peak": shared_state.running_state['dns']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['dns']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['dns']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['dns']["outbound_throughput_avg"]
+    })
+
+    # IGMP Metrics - Update from running_state
+    igmp_temp_metrics.update({
+        "inbound_throughput_peak": shared_state.running_state['igmp']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['igmp']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['igmp']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['igmp']["outbound_throughput_avg"]
+    })
+
+    # IPv4 Metrics - Update from running_state
+    ipv4_temp_metrics.update({
+        "inbound_throughput_peak": shared_state.running_state['ipv4']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['ipv4']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['ipv4']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['ipv4']["outbound_throughput_avg"]
+    })
+
+    # IPv6 Metrics - Update from running_state
+    ipv6_temp_metrics.update({
+        "inbound_throughput_peak": shared_state.running_state['ipv6']["inbound_throughput_peak"],
+        "inbound_throughput_avg": shared_state.running_state['ipv6']["inbound_throughput_avg"],
+        "outbound_throughput_peak": shared_state.running_state['ipv6']["outbound_throughput_peak"],
+        "outbound_throughput_avg": shared_state.running_state['ipv6']["outbound_throughput_avg"]
+    })
+
+    # Remove intermediate keys from temp_metrics
     for metrics in [
         tcp_temp_metrics,
         rtp_temp_metrics,
@@ -1087,6 +1390,8 @@ def calculate_metrics():
     ]:
         metrics.pop("inbound_packets",None)
         metrics.pop("outbound_packets",None)
+        metrics.pop("outbound_bytes",None)
+        metrics.pop("inbound_bytes",None)
 
     # Update Protocols and IP Metrics 
     shared_state.tcp_metrics = tcp_temp_metrics
@@ -1103,48 +1408,10 @@ def calculate_metrics():
     # Update Top 7 talkers
     calculate_top_talkers()
 
-    # Append a snapshot of the current metrics to the history lists for session analysis.
-    # This is where the historical data for the LLM summarizer is collected.
-
-    # Overall session metrics
-    shared_state.session_metrics_history.append(shared_state.metrics_state.copy())
-
-    # TCP: Store latency and throughput
-    shared_state.tcp_metrics_history.append({
-        'latency': shared_state.tcp_metrics['latency'],
-        'inbound_throughput': shared_state.tcp_metrics['inbound_throughput'],
-        'outbound_throughput': shared_state.tcp_metrics['outbound_throughput']
-    })
-
-    # RTP: Store jitter and throughput
-    shared_state.rtp_metrics_history.append({
-        'jitter': shared_state.rtp_metrics['jitter'],
-        'inbound_throughput': shared_state.rtp_metrics['inbound_throughput'],
-        'outbound_throughput': shared_state.rtp_metrics['outbound_throughput']
-    })
-
-    # Other protocols: Store only their throughput for the history
-    shared_state.udp_metrics_history.append({
-        'inbound_throughput': shared_state.udp_metrics['inbound_throughput'],
-        'outbound_throughput': shared_state.udp_metrics['outbound_throughput']
-    })
-    shared_state.quic_metrics_history.append({
-        'inbound_throughput': shared_state.quic_metrics['inbound_throughput'],
-        'outbound_throughput': shared_state.quic_metrics['outbound_throughput']
-    })
-    shared_state.dns_metrics_history.append({
-        'inbound_throughput': shared_state.dns_metrics['inbound_throughput'],
-        'outbound_throughput': shared_state.dns_metrics['outbound_throughput']
-    })
-    shared_state.igmp_metrics_history.append({
-        'inbound_throughput': shared_state.igmp_metrics['inbound_throughput'],
-        'outbound_throughput': shared_state.igmp_metrics['outbound_throughput']
-    })
-
     timing_end = time.perf_counter()  # ← Different name for timing, for checking purpose
     print(f"Metrics calculation took: {(timing_end - timing_start) * 1000:.2f}ms")
-    
-    return shared_state.metrics_state
+
+    return
 
 
 def update_metrics_status(status):
