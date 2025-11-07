@@ -40,9 +40,7 @@ async def data_collection_loop():
         if not shared_state.capture_active:
             continue
 
-        # This function correctly calculates and appends to history
         metrics_calculator.calculate_metrics()
-        shared_state.session_metrics_history.append(shared_state.metrics_state)
 
         disconnected_clients = set()
         for client in list(shared_state.connected_clients.keys()):
@@ -105,7 +103,7 @@ async def handle_stop_capture_task(websocket, data):
     await asyncio.sleep(0.5) 
 
     # 4. Check if we should summarize
-    should_summarize = success and bool(shared_state.session_metrics_history)
+    should_summarize = success 
     
     summary = None
     if should_summarize:
@@ -124,8 +122,6 @@ async def handle_stop_capture_task(websocket, data):
     else:
         if not success:
             print("Summary skipped: Tshark did not stop successfully.")
-        if not bool(shared_state.session_metrics_history):
-            print("Summary skipped: No session history was found.")
 
     # 5. Build the final response with the summary data
     response = {
@@ -170,6 +166,7 @@ async def handle_command(command, data):
         else:
             capture_manager.clear_all_packets()
             interface = data.get("interface", "1")
+            shared_state.session_start_time = datetime.now()
             success, msg = await capture_manager.start_tshark(interface)
             if success:
                 metrics_calculator.update_metrics_status("running")

@@ -3,8 +3,11 @@ Shared state module for Network Monitoring Dashboard
 Contains all global variables used across modules
 """
 
-# Duration default value
+# Duration value
 capture_duration = 1.5
+
+session_start_time = None
+session_duration_final = 0
 
 # Packet storage
 streams = {}
@@ -27,6 +30,7 @@ protocol_distribution = {
     "TLS": 0,
     "QUIC": 0,
     "DNS": 0,
+    "IGMP": 0,
     "Others": 0
 }
 
@@ -41,7 +45,15 @@ metrics_state = {
     "protocol_distribution": protocol_distribution,
     "streamCount": 0,
     "totalPackets": 0,
-    "packets_per_second": 0
+    "packets_per_second": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0,
+    "inbound_goodput_peak": 0.0,
+    "inbound_goodput_avg": 0.0,
+    "outbound_goodput_peak": 0.0,
+    "outbound_goodput_avg": 0.0
 }
 
 # Packet loss 
@@ -55,9 +67,6 @@ ip_address = []
 ipv4_ips = []
 ipv6_ips = []
 
-# List to store a history of metrics for the session summary
-session_metrics_history = []
-
 # Packets per second
 packets_Per_Second = 0
 
@@ -65,20 +74,32 @@ packets_Per_Second = 0
 tcp_metrics = {
     "packets_per_second": 0,
     "packet_loss": 0,
-    "packet_loss_percentage": 0,
+    "packet_loss_percentage": 0.0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
     "latency": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0,
+    "latency_peak": 0.0,
+    "latency_avg": 0.0
 }
 
 # RTP Data
 rtp_metrics = {
     "packets_per_second": 0,
     "packet_loss": 0,
-    "packet_loss_percentage": 0,
+    "packet_loss_percentage": 0.0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
     "jitter": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0,
+    "jitter_peak": 0.0,
+    "jitter_avg": 0.0
 }
 
 # UDP Data
@@ -86,6 +107,10 @@ udp_metrics = {
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0
 }
 
 # QUIC Data
@@ -93,6 +118,10 @@ quic_metrics = {
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0
 }
 
 # DNS Data
@@ -100,6 +129,10 @@ dns_metrics = {
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0
 }
 
 # IGMP Data
@@ -107,6 +140,10 @@ igmp_metrics = {
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0
 }
 
 # IPV4 Data
@@ -114,6 +151,10 @@ ipv4_metrics = {
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0
 }
 
 # IPV6 Data
@@ -121,6 +162,10 @@ ipv6_metrics = {
     "packets_per_second": 0,
     "inbound_throughput": 0,
     "outbound_throughput": 0,
+    "inbound_throughput_peak": 0.0,
+    "inbound_throughput_avg": 0.0,
+    "outbound_throughput_peak": 0.0,
+    "outbound_throughput_avg": 0.0
 }
 
 # IP Composition
@@ -130,8 +175,8 @@ ip_composition = {
     "ipv4_packets_cumulative": 0,
     "ipv6_packets_cumulative": 0,
     "total_packets": 0,
-    "ipv4_percentage": 0,
-    "ipv6_percentage": 0
+    "ipv4_percentage": 0.0,
+    "ipv6_percentage": 0.0
 }
 
 # Encryption Composition
@@ -141,17 +186,9 @@ encryption_composition = {
     "encrypted_packets_cumulative": 0,
     "unencrypted_packets_cumulative": 0,
     "total_packets": 0,         
-    "encrypted_percentage": 0,
-    "unencrypted_percentage": 0
+    "encrypted_percentage": 0.0,
+    "unencrypted_percentage": 0.0
 }
-
-# History lists for statistical analysis
-tcp_metrics_history = []
-rtp_metrics_history = []
-udp_metrics_history = []
-quic_metrics_history = []
-dns_metrics_history = []
-igmp_metrics_history = []
 
 # Top Talkers - Cumulative tracking
 # Dictionary structure: {(src_ip, dst_ip): {"packets": count, "bytes": total_bytes}}
@@ -170,3 +207,112 @@ ip_to_dns = {}
 # Per-IP statistics for map visualization
 # Structure: {"ip_address": {"packets": Y, "app_info": {...}}}
 ip_stats = {}
+
+# Internal tracking for running averages (NOT sent to frontend)
+running_state = {
+    # throughtput_sum represents bits sum
+
+    'overall': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'inbound_goodput_peak': 0.0,
+        'inbound_goodput_sum': 0.0,
+        'inbound_goodput_avg': 0.0,
+        'outbound_goodput_peak': 0.0,
+        'outbound_goodput_sum': 0.0,
+        'outbound_goodput_avg': 0.0,
+        'cumulative_duration': 0
+    },
+    
+    'tcp': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'latency_peak': 0.0,
+        'latency_sum': 0.0,
+        'latency_avg': 0.0,
+        'latency_count': 0,
+        'cumulative_duration': 0
+    },
+    
+    'udp': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'cumulative_duration': 0
+    },
+    
+    'rtp': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'jitter_peak': 0.0,
+        'jitter_sum': 0.0,
+        'jitter_avg': 0.0,
+        'jitter_count': 0,
+        'cumulative_duration': 0
+    },
+    
+    'quic': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'cumulative_duration': 0
+    },
+    
+    'dns': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'cumulative_duration': 0
+    },
+    
+    'igmp': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'cumulative_duration': 0
+    },
+    
+    'ipv4': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'cumulative_duration': 0
+    },
+    
+    'ipv6': {
+        'inbound_throughput_peak': 0.0,
+        'inbound_throughput_sum': 0.0,
+        'inbound_throughput_avg': 0.0,
+        'outbound_throughput_peak': 0.0,
+        'outbound_throughput_sum': 0.0,
+        'outbound_throughput_avg': 0.0,
+        'cumulative_duration': 0
+    }
+}
