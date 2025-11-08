@@ -28,21 +28,26 @@
      tcpMetrics, rtpMetrics, udpMetrics, quicMetrics, dnsMetrics, igmpMetrics,
      // IP Specific Metrics
      ipv4Metrics, ipv6Metrics, ipComposition,
-     // Protocol History & KPIs
+     // Protocol History (Throughput-only)
      tcpHistory, rtpHistory, udpHistory, quicHistory, dnsHistory, igmpHistory,
-     // IP Specific History & KPIs
      ipv4History, ipv6History,
+     
+     // *** ADDED: Get all KPI objects ***
      tcpKPIs, rtpKPIs, udpKPIs, quicKPIs, dnsKPIs, igmpKPIs,
-     // IP Specific KPIs
      ipv4KPIs, ipv6KPIs,
+     
      // Full Metrics History
      tcpFullMetricsHistory, rtpFullMetricsHistory,
-     // AI Summary states
+     ipv4FullMetricsHistory, ipv6FullMetricsHistory,
+     udpFullMetricsHistory,
+     quicFullMetricsHistory,
+     dnsFullMetricsHistory,
+     igmpFullMetricsHistory,
+     
+     // Other states
      captureSummary, summaryStatus,
      encryptionComposition,
-     // *** NEW: Get topTalkers from hook ***
      topTalkers,
-     // Geolocations
      geolocations,
    } = useWebSocket(WEBSOCKET_URL);
 
@@ -63,11 +68,9 @@ return (
              protocolDistribution={protocolDistribution}
              captureSummary={captureSummary}
              summaryStatus={summaryStatus}
-             // Pass topTalkers to Dashboard
              topTalkers={topTalkers}
            />
          ) : view === "rawdata" ? (
-            // ... (RawDataPage)
            <RawData
              wsConnected={wsConnected}
              packets={packets}
@@ -75,19 +78,27 @@ return (
              metrics={metrics}
            />
          ) : view === "protocolstats" ? (
-            // ... (ProtocolStatsPage)
             <ProtocolStatsPage
              wsConnected={wsConnected}
              error={error}
              metrics={metrics}
+             // Current metrics
              tcpMetrics={tcpMetrics} rtpMetrics={rtpMetrics} udpMetrics={udpMetrics} quicMetrics={quicMetrics} dnsMetrics={dnsMetrics} igmpMetrics={igmpMetrics}
+             // Throughput history
              tcpHistory={tcpHistory} rtpHistory={rtpHistory} udpHistory={udpHistory} quicHistory={quicHistory} dnsHistory={dnsHistory} igmpHistory={igmpHistory}
+             
+             // *** ADDED: Pass all KPI objects down ***
              tcpKPIs={tcpKPIs} rtpKPIs={rtpKPIs} udpKPIs={udpKPIs} quicKPIs={quicKPIs} dnsKPIs={dnsKPIs} igmpKPIs={igmpKPIs}
+             
+             // Full metrics history
              tcpFullMetricsHistory={tcpFullMetricsHistory}
              rtpFullMetricsHistory={rtpFullMetricsHistory}
+             udpFullMetricsHistory={udpFullMetricsHistory}
+             quicFullMetricsHistory={quicFullMetricsHistory}
+             dnsFullMetricsHistory={dnsFullMetricsHistory}
+             igmpFullMetricsHistory={igmpFullMetricsHistory}
            />
          ) : view === "trafficcomposition" ? (
-             // ... (TrafficCompositionPage)
             <TrafficCompositionPage
              wsConnected={wsConnected}
              error={error}
@@ -97,12 +108,13 @@ return (
              ipComposition={ipComposition}
              ipv4History={ipv4History}
              ipv6History={ipv6History}
-             ipv4KPIs={ipv4KPIs}
-             ipv6KPIs={ipv6KPIs}
+             ipv4KPIs={ipv4KPIs} // Pass the KPIs
+             ipv6KPIs={ipv6KPIs} // Pass the KPIs
+             ipv4FullMetricsHistory={ipv4FullMetricsHistory}
+             ipv6FullMetricsHistory={ipv6FullMetricsHistory}
              encryptionComposition={encryptionComposition}
             />
          ) : view === "geomap" ? (
-             // ... (GeoMapPage)
            <GeoMapPage
              wsConnected={wsConnected}
              error={error}

@@ -2,55 +2,68 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
-// Define specific colors for IP versions
 const IP_COLORS = {
     IPv4: '#3B82F6', // Blue
     IPv6: '#F472B6', // Pink
 };
 
 export default function IpCompositionPieChart({ data }) {
-    // Check if cumulative data is present and non-zero
-    // Use the cumulative keys from the backend shared_state.py
     const ipv4Cumulative = data?.ipv4_packets_cumulative || 0;
     const ipv6Cumulative = data?.ipv6_packets_cumulative || 0;
     const totalCumulative = ipv4Cumulative + ipv6Cumulative;
 
     if (!data || totalCumulative === 0) {
         return (
-            <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72 flex items-center justify-center">
+            <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-full flex items-center justify-center">
                 <p className="text-text-secondary">No cumulative IP composition data available.</p>
             </div>
         );
     }
 
-    // Prepare data for the Pie Chart using CUMULATIVE counts
     const chartData = [
         { name: 'IPv4', value: ipv4Cumulative, fill: IP_COLORS.IPv4 },
         { name: 'IPv6', value: ipv6Cumulative, fill: IP_COLORS.IPv6 },
-    ].filter(entry => entry.value > 0); // Only include if count > 0
+    ].filter(entry => entry.value > 0);
 
-    // Handle case where filtering results in empty data (unlikely now)
     if (chartData.length === 0) {
        return (
-            <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72 flex items-center justify-center">
+            <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-full flex items-center justify-center">
                 <p className="text-text-secondary">No IPv4 or IPv6 packets detected in session.</p>
             </div>
         );
     }
 
+    // Get percentages for the new stats block
+    const ipv4Percent = (data.ipv4_percentage || 0).toFixed(1);
+    const ipv6Percent = (data.ipv6_percentage || 0).toFixed(1);
+
     return (
-        <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-72">
-          {/* Updated Title */}
-          <h3 className="text-md font-semibold text-text-main mb-4">Cumulative IP Version Distribution</h3>
-          <ResponsiveContainer width="100%" height="85%">
-            <PieChart margin={{ top: 20 }}>
+        // *** CHANGED: Removed fixed height, added h-full ***
+        <div className="bg-surface-dark p-4 rounded-xl border border-border-dark shadow-md h-full flex flex-col">
+          <h3 className="text-md font-semibold text-text-main mb-2">IP Version Distribution</h3>
+          
+          {/* *** ADDED: Moved Legend to the top to prevent clipping *** */}
+          <div className="flex justify-center w-full mb-2">
+            <Legend
+              payload={chartData.map(entry => ({
+                value: entry.name,
+                type: 'square',
+                color: entry.fill
+              }))}
+              wrapperStyle={{ fontSize: '14px' }}
+            />
+          </div>
+
+          {/* Chart Container */}
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
               <Pie
                 data={chartData}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                outerRadius={80}
-                fill="#8884d8" // Default fill, overridden by Cell
+                outerRadius={90} // Slightly smaller radius to fit
+                fill="#8884d8"
                 dataKey="value"
                 nameKey="name"
               >
@@ -65,15 +78,30 @@ export default function IpCompositionPieChart({ data }) {
                 }}
                 itemStyle={{ color: '#E6EDF3' }}
                 labelStyle={{ color: '#8B949E' }}
-                 // Update formatter to use totalCumulative and correct percentage source from ipComposition object
-                formatter={(value, name, props) => {
-                    const percentage = (name === 'IPv4' ? data.ipv4_percentage : data.ipv6_percentage) || 0;
-                    return [`${value} packets (${percentage.toFixed(1)}%)`, name];
+                formatter={(value, name) => {
+                    const percentage = (name === 'IPv4' ? ipv4Percent : ipv6Percent);
+                    return [`${value.toLocaleString()} packets (${percentage}%)`, name];
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: '14px', paddingTop: '20px' }} />
             </PieChart>
           </ResponsiveContainer>
+          
+          {/* *** ADDED: New Stats Block (Your Idea) *** */}
+          <div className="flex-grow flex justify-around items-center pt-4 border-t border-border-dark">
+            <div className="text-center">
+              <p className="text-3xl font-bold" style={{ color: IP_COLORS.IPv4 }}>
+                {ipv4Percent}%
+              </p>
+              <p className="text-sm text-text-secondary">IPv4</p>
+            </div>
+            <div className="text-center">
+              <p className="text-3xl font-bold" style={{ color: IP_COLORS.IPv6 }}>
+                {ipv6Percent}%
+              </p>
+              <p className="text-sm text-text-secondary">IPv6</p>
+            </div>
+          </div>
+
         </div>
       );
 }

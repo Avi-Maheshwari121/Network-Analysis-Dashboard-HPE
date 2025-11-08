@@ -1,35 +1,8 @@
 // Frontend/src/hooks/useWebsocket.js
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const MAX_PACKETS_TO_STORE = 10000;
 const MAX_HISTORY_LENGTH = 30; // History length for charts
-
-// Helper function to calculate KPIs from history (remains the same)
-const calculateThroughputKPIs = (history) => {
-  if (!history || history.length === 0) {
-    return { peakIn: 0, peakOut: 0, avgIn: 0, avgOut: 0 };
-  }
-  let peakIn = 0;
-  let peakOut = 0;
-  let sumIn = 0;
-  let sumOut = 0;
-  history.forEach(entry => {
-    const inVal = Number(entry.inbound_throughput || 0);
-    const outVal = Number(entry.outbound_throughput || 0);
-    peakIn = Math.max(peakIn, inVal);
-    peakOut = Math.max(peakOut, outVal);
-    sumIn += inVal;
-    sumOut += outVal;
-  });
-  const count = history.length;
-  return {
-    peakIn: peakIn.toFixed(2),
-    peakOut: peakOut.toFixed(2),
-    avgIn: (sumIn / count).toFixed(2),
-    avgOut: (sumOut / count).toFixed(2),
-  };
-};
-
 
 export default function useWebSocket(url) {
   const [wsConnected, setWsConnected] = useState(false);
@@ -56,7 +29,17 @@ export default function useWebSocket(url) {
   const [encryptionComposition, setEncryptionComposition] = useState(null);
   const [geolocations, setGeolocations] = useState([]);
 
-  // Protocol Specific History
+  // *** ADDED: State to hold KPIs calculated by the BACKEND ***
+  const [tcpKPIs, setTcpKPIs] = useState(null);
+  const [rtpKPIs, setRtpKPIs] = useState(null);
+  const [udpKPIs, setUdpKPIs] = useState(null);
+  const [quicKPIs, setQuicKPIs] = useState(null);
+  const [ipv4KPIs, setIpv4KPIs] = useState(null);
+  const [ipv6KPIs, setIpv6KPIs] = useState(null);
+  const [dnsKPIs, setDnsKPIs] = useState(null);
+  const [igmpKPIs, setIgmpKPIs] = useState(null);
+
+  // Protocol Specific (Throughput-Only) History
   const [tcpHistory, setTcpHistory] = useState([]);
   const [rtpHistory, setRtpHistory] = useState([]);
   const [udpHistory, setUdpHistory] = useState([]);
@@ -66,13 +49,17 @@ export default function useWebSocket(url) {
   const [dnsHistory, setDnsHistory] = useState([]);
   const [igmpHistory, setIgmpHistory] = useState([]);
 
-  // Full Protocol Metrics History
+  // Full Protocol Metrics History (includes PPS, latency, jitter, etc.)
   const [tcpFullMetricsHistory, setTcpFullMetricsHistory] = useState([]);
   const [rtpFullMetricsHistory, setRtpFullMetricsHistory] = useState([]);
+  const [ipv4FullMetricsHistory, setIpv4FullMetricsHistory] = useState([]);
+  const [ipv6FullMetricsHistory, setIpv6FullMetricsHistory] = useState([]);
+  const [udpFullMetricsHistory, setUdpFullMetricsHistory] = useState([]);
+  const [quicFullMetricsHistory, setQuicFullMetricsHistory] = useState([]);
+  const [dnsFullMetricsHistory, setDnsFullMetricsHistory] = useState([]);
+  const [igmpFullMetricsHistory, setIgmpFullMetricsHistory] = useState([]);
 
-  // *** NEW: State for Top Talkers ***
   const [topTalkers, setTopTalkers] = useState([]);
-
   const isStopping = useRef(false);
 
   // AI Summary States
@@ -108,7 +95,7 @@ export default function useWebSocket(url) {
         const msg = JSON.parse(data);
         setError(null);
 
-        // Initialization checks (allow initial interfaces/status)
+        // Initialization checks
         if (!isInitialized && msg.type === 'initial_state') {
              console.log('=== Received initial_state ==='); isInitialized = true;
         } else if (!isInitialized && msg.type === 'interfaces_response') { console.log('Received interfaces before initial_state');
@@ -127,7 +114,7 @@ export default function useWebSocket(url) {
 
         switch (msg.type) {
           case "initial_state":
-             isInitialized = true; // Ensure flag is set
+             isInitialized = true;
              setMetrics(msg.metrics || null);
              setPackets(msg.packets || []);
              setInterfaces(msg.interfaces || interfaces);
@@ -144,14 +131,26 @@ export default function useWebSocket(url) {
              setIgmpMetrics(msg.igmp_metrics || null);
              setIpComposition(msg.ip_composition || null);
              setEncryptionComposition(msg.encryption_composition || null);
+             
+             // Reset all history arrays
              setTcpHistory([]); setRtpHistory([]); setUdpHistory([]);
              setQuicHistory([]); setIpv4History([]); setIpv6History([]);
              setDnsHistory([]); setIgmpHistory([]);
              setTcpFullMetricsHistory([]); setRtpFullMetricsHistory([]);
-             // *** NEW: Reset Top Talkers on initial state ***
+             setIpv4FullMetricsHistory([]); setIpv6FullMetricsHistory([]);
+             setUdpFullMetricsHistory([]);
+             setQuicFullMetricsHistory([]);
+             setDnsFullMetricsHistory([]);
+             setIgmpFullMetricsHistory([]);
+
+             // *** ADDED: Reset KPI states ***
+             setTcpKPIs(null); setRtpKPIs(null); setUdpKPIs(null);
+             setQuicKPIs(null); setIpv4KPIs(null); setIpv6KPIs(null);
+             setDnsKPIs(null); setIgmpKPIs(null);
+             
              setTopTalkers(msg.top_talkers || []);
              setCaptureSummary(null); setSummaryStatus('idle');
-             isStopping.current = false;
+             setGeolocations([]);
             break;
 
           case "interfaces_response":
@@ -164,6 +163,7 @@ export default function useWebSocket(url) {
             break;
 
           case "update":
+            // Set current metrics
             setMetrics(msg.metrics);
             setProtocolDistribution(msg.metrics.protocol_distribution || {});
             setTcpMetrics(msg.tcp_metrics);
@@ -176,43 +176,52 @@ export default function useWebSocket(url) {
             setIgmpMetrics(msg.igmp_metrics);
             setIpComposition(msg.ip_composition);
             setEncryptionComposition(msg.encryption_composition);
-            // *** NEW: Update Top Talkers ***
+            
+            // *** ADDED: Set KPI states from backend message ***
+            // These keys match what your teammate added to websocket_server.py
+            setTcpKPIs(msg.tcp_metrics);
+            setRtpKPIs(msg.rtp_metrics);
+            setUdpKPIs(msg.udp_metrics);
+            setQuicKPIs(msg.quic_metrics);
+            setIpv4KPIs(msg.ipv4_metrics);
+            setIpv6KPIs(msg.ipv6_metrics);
+            setDnsKPIs(msg.dns_metrics);
+            setIgmpKPIs(msg.igmp_metrics);
+
             setTopTalkers(msg.top_talkers || []);
 
-            // Update global metrics history
+            // Update global metrics history (for Dashboard page)
             if (msg.metrics) {
                 setMetricsHistory(prevHistory => {
                   const newEntry = {
                     time: timestamp,
-                    inbound: parseFloat((msg.metrics.inbound_throughput || 0).toFixed(2)),
-                    outbound: parseFloat((msg.metrics.outbound_throughput || 0).toFixed(2)),
+                    inbound: msg.metrics.inbound_throughput || 0,
+                    outbound: msg.metrics.outbound_throughput || 0,
                     latency: parseFloat(msg.metrics.latency?.toFixed(1) || 0),
                     jitter: parseFloat((msg.metrics.jitter || 0).toFixed(1)),
+                    packets_per_sec: Math.round(msg.metrics.packets_per_second || 0)
                   };
                   return [...prevHistory, newEntry].slice(-MAX_HISTORY_LENGTH);
                 });
             }
-
+            
             if (msg.new_geolocations && Array.isArray(msg.new_geolocations) && msg.new_geolocations.length > 0) {
               setGeolocations(prevLocations => {
                 const existingIps = new Set(prevLocations.map(l => l.ip));
-                // Make sure to use the correct variable here too.
                 const newUniqueLocations = msg.new_geolocations.filter(l => !existingIps.has(l.ip));
                 return [...prevLocations, ...newUniqueLocations];
               });
             }
 
-            // Update protocol-specific throughput history
+            // Update protocol-specific *throughput-only* history
             const updateProtocolHistory = (setter, metricsData) => {
               if (metricsData && metricsData.hasOwnProperty('inbound_throughput') && metricsData.hasOwnProperty('outbound_throughput')) {
-                const inThrRaw = metricsData.inbound_throughput;
-                const outThrRaw = metricsData.outbound_throughput;
-                let inThrNum = parseFloat(inThrRaw || 0);
-                let outThrNum = parseFloat(outThrRaw || 0);
-                inThrNum = isNaN(inThrNum) ? 0 : inThrNum;
-                outThrNum = isNaN(outThrNum) ? 0 : outThrNum;
                 setter(prev => [
-                  ...prev, { time: timestamp, inbound_throughput: inThrNum, outbound_throughput: outThrNum }
+                  ...prev, { 
+                    time: timestamp, 
+                    inbound_throughput: metricsData.inbound_throughput || 0, 
+                    outbound_throughput: metricsData.outbound_throughput || 0 
+                  }
                 ].slice(-MAX_HISTORY_LENGTH));
               }
             };
@@ -225,16 +234,46 @@ export default function useWebSocket(url) {
             updateProtocolHistory(setDnsHistory, msg.dns_metrics);
             updateProtocolHistory(setIgmpHistory, msg.igmp_metrics);
 
-            // Update full metrics history for TCP and RTP
+            // Update *full* metrics history (for PPS, Latency, Jitter charts)
              if (msg.tcp_metrics) {
                setTcpFullMetricsHistory(prev => [
-                   ...prev, { time: timestamp, ...msg.tcp_metrics, latency: Number(msg.tcp_metrics.latency || 0) }
+                   ...prev, { time: timestamp, ...msg.tcp_metrics }
                ].slice(-MAX_HISTORY_LENGTH));
              }
              if (msg.rtp_metrics) {
                  setRtpFullMetricsHistory(prev => [
-                     ...prev, { time: timestamp, ...msg.rtp_metrics, jitter: Number(msg.rtp_metrics.jitter || 0) }
+                     ...prev, { time: timestamp, ...msg.rtp_metrics }
                  ].slice(-MAX_HISTORY_LENGTH));
+             }
+             if (msg.ipv4_metrics) {
+               setIpv4FullMetricsHistory(prev => [
+                   ...prev, { time: timestamp, ...msg.ipv4_metrics }
+               ].slice(-MAX_HISTORY_LENGTH));
+             }
+             if (msg.ipv6_metrics) {
+                 setIpv6FullMetricsHistory(prev => [
+                     ...prev, { time: timestamp, ...msg.ipv6_metrics }
+                 ].slice(-MAX_HISTORY_LENGTH));
+             }
+             if (msg.udp_metrics) {
+               setUdpFullMetricsHistory(prev => [
+                   ...prev, { time: timestamp, ...msg.udp_metrics }
+               ].slice(-MAX_HISTORY_LENGTH));
+             }
+             if (msg.quic_metrics) {
+               setQuicFullMetricsHistory(prev => [
+                   ...prev, { time: timestamp, ...msg.quic_metrics }
+               ].slice(-MAX_HISTORY_LENGTH));
+             }
+             if (msg.dns_metrics) {
+               setDnsFullMetricsHistory(prev => [
+                   ...prev, { time: timestamp, ...msg.dns_metrics }
+               ].slice(-MAX_HISTORY_LENGTH));
+             }
+             if (msg.igmp_metrics) {
+               setIgmpFullMetricsHistory(prev => [
+                   ...prev, { time: timestamp, ...msg.igmp_metrics }
+               ].slice(-MAX_HISTORY_LENGTH));
              }
 
             // Handle packet updates
@@ -268,10 +307,13 @@ export default function useWebSocket(url) {
               isStopping.current = false;
               setMetrics(prev => ({ ...(prev || {}), status: "running" }));
               setPackets([]); setMetricsHistory([]); setProtocolDistribution({});
+              // Reset all metrics
               setTcpMetrics(null); setRtpMetrics(null); setUdpMetrics(null);
               setQuicMetrics(null); setIpv4Metrics(null); setIpv6Metrics(null);
               setDnsMetrics(null); setIgmpMetrics(null);
               setIpComposition(null); setEncryptionComposition(null);
+              
+              // Reset all history arrays
               setTcpHistory([]); setRtpHistory([]); setUdpHistory([]);
               setQuicHistory([]); setIpv4History([]); setIpv6History([]);
               setDnsHistory([]); setIgmpHistory([]);
@@ -312,7 +354,6 @@ export default function useWebSocket(url) {
   }, [url]);
 
   const sendCommand = (command, payload = {}) => {
-    // ... (keep existing implementation)
     console.log(`Sending command: ${command}`, payload);
     if (!ws.current || ws.current.readyState !== WebSocket.OPEN) {
       setError("Cannot send command: WebSocket is not connected.");
@@ -323,40 +364,40 @@ export default function useWebSocket(url) {
     if (command === "stop_capture") {
       if (metrics?.status === 'running') {
         console.log("Initiating stop capture..."); isStopping.current = true;
-        setMetrics(prev => ({ ...prev, status: "stopped" })); setSummaryStatus('loading');
-      } else { console.log("Stop cmd sent, but not running."); }
+        // We now expect an immediate 'stop_capture_ack' and a later 'stop_capture'
+        setSummaryStatus('loading');
+      } else { 
+        console.log("Stop cmd sent, but not running."); 
+      }
     } else if (command === "start_capture") {
         setLoading(true); setError(null); setCommandStatus(null);
     } else { setLoading(true); }
     ws.current.send(JSON.stringify({ command, ...payload }));
   };
 
-  // Calculate KPIs using useMemo (remains the same)
-  const tcpKPIs = useMemo(() => calculateThroughputKPIs(tcpHistory), [tcpHistory]);
-  const rtpKPIs = useMemo(() => calculateThroughputKPIs(rtpHistory), [rtpHistory]);
-  const udpKPIs = useMemo(() => calculateThroughputKPIs(udpHistory), [udpHistory]);
-  const quicKPIs = useMemo(() => calculateThroughputKPIs(quicHistory), [quicHistory]);
-  const ipv4KPIs = useMemo(() => calculateThroughputKPIs(ipv4History), [ipv4History]);
-  const ipv6KPIs = useMemo(() => calculateThroughputKPIs(ipv6History), [ipv6History]);
-  const dnsKPIs = useMemo(() => calculateThroughputKPIs(dnsHistory), [dnsHistory]);
-  const igmpKPIs = useMemo(() => calculateThroughputKPIs(igmpHistory), [igmpHistory]);
-
   return {
     wsConnected, metrics, packets, commandStatus, loading, error, sendCommand, interfaces, metricsHistory, protocolDistribution,
     // Protocol metrics
     tcpMetrics, rtpMetrics, udpMetrics, quicMetrics, ipv4Metrics, ipv6Metrics, dnsMetrics, igmpMetrics, ipComposition,
-    // Protocol throughput history and KPIs
+    // Protocol throughput history (for charts)
     tcpHistory, rtpHistory, udpHistory, quicHistory, ipv4History, ipv6History, dnsHistory, igmpHistory,
+    
+    // *** CHANGED: Pass through KPI state from backend ***
     tcpKPIs, rtpKPIs, udpKPIs, quicKPIs, ipv4KPIs, ipv6KPIs, dnsKPIs, igmpKPIs,
-    // Full metrics history
+    
+    // Full metrics history (for charts)
     tcpFullMetricsHistory, rtpFullMetricsHistory,
+    ipv4FullMetricsHistory, ipv6FullMetricsHistory,
+    udpFullMetricsHistory,
+    quicFullMetricsHistory,
+    dnsFullMetricsHistory,
+    igmpFullMetricsHistory,
+    
     // AI Summary
     captureSummary, summaryStatus,
     //Encryption Export
     encryptionComposition,
-    // *** NEW: Export Top Talkers ***
     topTalkers,
-    // Geolocations
     geolocations,
   };
 }

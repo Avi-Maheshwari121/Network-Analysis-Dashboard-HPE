@@ -27,6 +27,7 @@ export default function Dashboard({
   const [captureDuration, setCaptureDuration] = useState(0);
   const intervalRef = useRef(null);
 
+  // ... (useEffect and helper functions for timer remain identical) ...
   // Check sessionStorage only on initial mount to handle refresh persistence
   useEffect(() => {
     const storedStartTime = sessionStorage.getItem('captureStartTime');
@@ -116,17 +117,35 @@ export default function Dashboard({
         captureDuration={captureDuration}
       />
       <MetricCards metrics={metrics} />
-      <div className="mt-6 h-72">
-         <MetricChart
+      
+      {/* Overall Throughput and Packets Per Second - Side by Side */}
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="h-72">
+          <MetricChart
             title="Overall Throughput"
-            unit=" Mbps"
+            // *** CHANGED: Pass "bps" to trigger dynamic scaling ***
+            unit="bps"
             data={metricsHistory}
             lines={[
               { dataKey: "inbound", name: "Inbound", color: "#2DD4BF" },
               { dataKey: "outbound", name: "Outbound", color: "#3B82F6" }
             ]}
           />
+        </div>
+        <div className="h-72">
+          <MetricChart
+            title="Packets Per Second"
+            // *** CHANGED: Pass "pps" (no space) ***
+            unit="pps"
+            data={metricsHistory}
+            lines={[
+              // This dataKey MUST be added to useWebsocket.js
+              { dataKey: "packets_per_sec", name: "Packets/sec", color: "#8B5CF6" }
+            ]}
+          />
+        </div>
       </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
         <div className="lg:col-span-1">
             <ProtocolPieChart data={protocolDistribution} />
