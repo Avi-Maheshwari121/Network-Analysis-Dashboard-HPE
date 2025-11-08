@@ -2,7 +2,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
-const COLORS = ['#2DD4BF', '#3B82F6', '#F472B6', '#FBBF24', '#8B5CF6', '#d1d5db', '#22C55E'];
+const COLORS = ['#2DD4BF', '#3B82F6', '#F472B6', '#FBBF24', '#8B5CF6', '#d1d5db', '#22C55E', '#EF4444'];
 
 export default function ProtocolPieChart({ data }) {
     if (!data || Object.keys(data).length === 0) {

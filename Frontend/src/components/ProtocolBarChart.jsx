@@ -3,7 +3,7 @@ import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 // Use the same colors as the Pie Chart for consistency
-const COLORS = ['#2DD4BF', '#3B82F6', '#F472B6', '#FBBF24', '#8B5CF6', '#d1d5db', '#22C55E'];
+const COLORS = ['#2DD4BF', '#3B82F6', '#F472B6', '#FBBF24', '#8B5CF6', '#d1d5db', '#22C55E', '#EF4444'];
 
 export default function ProtocolBarChart({ data }) {
     if (!data || Object.keys(data).length === 0) {
@@ -30,11 +30,12 @@ export default function ProtocolBarChart({ data }) {
           <ResponsiveContainer width="100%" height="85%">
             <BarChart
               data={chartData}
-              layout="vertical" // Makes it a horizontal bar chart, often better for category labels
+              layout="vertical" // Makes it a horizontal bar chart
               margin={{
                 top: 5,
                 right: 30,
-                left: 20, // Increased left margin for labels
+                // *** CHANGED: Increased left margin ***
+                left: 30, 
                 bottom: 5,
               }}
             >
@@ -45,8 +46,10 @@ export default function ProtocolBarChart({ data }) {
                   type="category"
                   stroke="#8B949E"
                   fontSize={12}
+                  // *** CHANGED: Increased width and added interval={0} ***
+                  width={80} // Increased from 60
+                  interval={0} // Force all labels to render
                   tick={{ fill: '#8B949E' }}
-                  width={60} // Adjust width as needed for labels
               />
               {/* Value Axis (Packet Count) */}
               <XAxis
@@ -54,6 +57,12 @@ export default function ProtocolBarChart({ data }) {
                   stroke="#8B949E"
                   fontSize={12}
                   tick={{ fill: '#8B949E' }}
+                  // *** ADDED: Format large numbers (e.g., 450000 to 450k) ***
+                  tickFormatter={(value) => {
+                    if (value >= 1000000) return `${value / 1000000}M`;
+                    if (value >= 1000) return `${value / 1000}k`;
+                    return value;
+                  }}
               />
               <Tooltip
                 contentStyle={{
@@ -62,7 +71,9 @@ export default function ProtocolBarChart({ data }) {
                 }}
                 itemStyle={{ color: '#E6EDF3' }}
                 labelStyle={{ color: '#8B949E' }}
-                cursor={{fill: '#161B22'}} // Darker background on hover
+                cursor={{fill: '#161B22'}} 
+                // *** ADDED: Format tooltip value with commas ***
+                formatter={(value) => [value.toLocaleString(), 'Packet Count']}
               />
               <Bar dataKey="value" name="Packet Count" barSize={20}>
                   {chartData.map((entry, index) => (
