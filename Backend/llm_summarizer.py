@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 import google.generativeai as genai
 import shared_state
+from datetime import datetime
 
 # --- AI Setup ---
 load_dotenv()
@@ -12,40 +13,53 @@ if GEMINI_API_KEY:
 else:
     print("WARNING: GEMINI_API_KEY not found. AI summary will be disabled.")
 
-# --- Helper Functions for Pre-Calculation ---
 
-def _calculate_average(values):
-    """Safely calculates the average of a list of numbers."""
-    if not values:
-        return 0
-    # Filter out None or non-numeric types before summing
-    numeric_values = [v for v in values if isinstance(v, (int, float))]
-    if not numeric_values:
-        return 0
-    return round(sum(numeric_values) / len(numeric_values), 2)
+def _format_throughput(bits):
+    """Converts raw bits to a human-readable string with the best unit."""
+    if bits == 0:
+        return "0.0 bps"
+    
+    gbps = 1_000_000_000
+    mbps = 1_000_000
+    kbps = 1_000
+    
+    if bits >= gbps:
+        return f"{round(bits / gbps, 2)} Gbps"
+    elif bits >= mbps:
+        return f"{round(bits / mbps, 2)} Mbps"
+    elif bits >= kbps:
+        return f"{round(bits / kbps, 2)} Kbps"
+    else:
+        return f"{round(bits, 2)} bps"
+    
 
-def analyze_protocol_performance(history, special_metrics=None):
-    """Analyzes a protocol's history for throughputs and special metrics like latency or jitter."""
+def analyze_protocol_performance(protocol_metrics, special_metrics=None):
+    """
+    Analyzes protocol performance using pre-calculated averages from _running_state.
+    No history arrays needed.
+    """
     if special_metrics is None:
         special_metrics = []
-    if not history:
-        analysis = {'average_inbound_throughput_mbps': 0, 'average_outbound_throughput_mbps': 0}
-        for metric in special_metrics:
-            analysis[f'average_{metric}_ms'] = 0
-        return analysis
-    inbound = [m.get('inbound_throughput', 0) for m in history]
-    outbound = [m.get('outbound_throughput', 0) for m in history]
+
+    # Get averages directly from protocol_metrics (which has _peak and _avg fields)
     analysis = {
-        'average_inbound_throughput_mbps': _calculate_average(inbound),
-        'average_outbound_throughput_mbps': _calculate_average(outbound),
+        'average_inbound_throughput': _format_throughput(
+            protocol_metrics.get('inbound_throughput_avg', 0)
+        ),
+        'average_outbound_throughput': _format_throughput(
+            protocol_metrics.get('outbound_throughput_avg', 0)
+        ),
     }
+
+    # Add special metrics (latency/jitter) if present
     for metric in special_metrics:
-        values = [m.get(metric, 0) for m in history if m.get(metric) is not None]
-        analysis[f'average_{metric}_ms'] = _calculate_average(values)
+        avg_value = protocol_metrics.get(f'{metric}_avg', 0)
+        analysis[f'average_{metric}_ms'] = round(avg_value, 2)
+
     return analysis
+    
 
 # --- Main Summary Generator ---
-
 async def generate_summary():
     """
     Generates a network session summary by pre-calculating all metrics
@@ -53,32 +67,37 @@ async def generate_summary():
     """
     if not GEMINI_API_KEY:
         return {"summary": "AI summary is unavailable. API key is not configured.", "breakdown": []}
-    if not shared_state.session_metrics_history:
+    
+    if not hasattr(shared_state, 'session_start_time') or shared_state.session_start_time is None:
         return {"summary": "No data was captured to generate a summary.", "breakdown": []}
 
     # 1. Get Session Duration and Final Packet Distribution
-    duration = shared_state.session_duration_final if hasattr(shared_state, 'session_duration_final') and shared_state.session_duration_final > 0 else len(shared_state.session_metrics_history) * shared_state.capture_duration
-    final_distribution = shared_state.session_metrics_history[-1].get("protocol_distribution", {})
+    duration = shared_state.session_duration_final if hasattr(shared_state, 'session_duration_final') and shared_state.session_duration_final > 0 else (datetime.now() - shared_state.session_start_time).total_seconds()
+    final_distribution = shared_state.metrics_state.get("protocol_distribution", {})
     total_packets_overall = sum(final_distribution.values())
 
     # 2. Pre-calculate Overall Throughput and Goodput
-    overall_in_thr = [m.get('inbound_throughput', 0) for m in shared_state.session_metrics_history]
-    overall_out_thr = [m.get('outbound_throughput', 0) for m in shared_state.session_metrics_history]
-    overall_in_good = [m.get('inbound_goodput', 0) for m in shared_state.session_metrics_history]
-    overall_out_good = [m.get('outbound_goodput', 0) for m in shared_state.session_metrics_history]
     overall_throughput_data = {
         "total_packets": total_packets_overall,
-        "average_pps": round(total_packets_overall / duration, 2) if duration > 0 else 0,
-        "average_inbound_throughput_mbps": _calculate_average(overall_in_thr),
-        "average_outbound_throughput_mbps": _calculate_average(overall_out_thr),
-        "average_inbound_goodput_mbps": _calculate_average(overall_in_good),
-        "average_outbound_goodput_mbps": _calculate_average(overall_out_good),
+        "average_pps": f"{round(total_packets_overall / duration, 2) if duration > 0 else 0} PPS",
+        "average_inbound_throughput": _format_throughput(
+            shared_state.metrics_state.get('inbound_throughput_avg', 0)
+        ),
+        "average_outbound_throughput": _format_throughput(
+            shared_state.metrics_state.get('outbound_throughput_avg', 0)
+        ),
+        "average_inbound_goodput": _format_throughput(
+            shared_state.metrics_state.get('inbound_goodput_avg', 0)
+        ),
+        "average_outbound_goodput": _format_throughput(
+            shared_state.metrics_state.get('outbound_goodput_avg', 0)
+        ),
     }
 
     # 3. Use final cumulative IP Composition values directly from shared_state
     ipv4_cumulative = shared_state.ip_composition.get("ipv4_packets_cumulative", 0)
     ipv6_cumulative = shared_state.ip_composition.get("ipv6_packets_cumulative", 0)
-    total_ip_packets = shared_state.ip_composition.get("total_packets", 0)
+    total_ip_packets = ipv4_cumulative + ipv6_cumulative
     ipv4_percentage = shared_state.ip_composition.get("ipv4_percentage", 0)
     ipv6_percentage = shared_state.ip_composition.get("ipv6_percentage", 0)
     
@@ -93,7 +112,7 @@ async def generate_summary():
    # 4. Pre-calculate final Encryption Composition from shared_state
     encrypted_cumulative = shared_state.encryption_composition.get("encrypted_packets_cumulative", 0)
     unencrypted_cumulative = shared_state.encryption_composition.get("unencrypted_packets_cumulative", 0)
-    total_encryption_packets = shared_state.encryption_composition.get("total_packets", 0)
+    total_encryption_packets = encrypted_cumulative + unencrypted_cumulative
     encrypted_percentage = shared_state.encryption_composition.get("encrypted_percentage", 0)
     unencrypted_percentage = shared_state.encryption_composition.get("unencrypted_percentage", 0)
 
@@ -107,29 +126,31 @@ async def generate_summary():
 
     # 5. Pre-calculate all performance metrics for each protocol
     protocol_map = {
-        'TCP': (analyze_protocol_performance(shared_state.tcp_metrics_history, ['latency']), shared_state.tcp_metrics),
-        'RTP': (analyze_protocol_performance(shared_state.rtp_metrics_history, ['jitter']), shared_state.rtp_metrics),
-        'UDP': (analyze_protocol_performance(shared_state.udp_metrics_history), shared_state.udp_metrics),
-        'QUIC': (analyze_protocol_performance(shared_state.quic_metrics_history), shared_state.quic_metrics),
-        'DNS': (analyze_protocol_performance(shared_state.dns_metrics_history), shared_state.dns_metrics),
-        'IGMP': (analyze_protocol_performance(shared_state.igmp_metrics_history), shared_state.igmp_metrics),
+        'TCP': (analyze_protocol_performance(shared_state.tcp_metrics, ['latency']), shared_state.tcp_metrics),
+        'RTP': (analyze_protocol_performance(shared_state.rtp_metrics, ['jitter']), shared_state.rtp_metrics),
+        'UDP': (analyze_protocol_performance(shared_state.udp_metrics), shared_state.udp_metrics),
+        'QUIC': (analyze_protocol_performance(shared_state.quic_metrics), shared_state.quic_metrics),
+        'DNS': (analyze_protocol_performance(shared_state.dns_metrics), shared_state.dns_metrics),
+        'IGMP': (analyze_protocol_performance(shared_state.igmp_metrics), shared_state.igmp_metrics),
     }
     protocol_data = {}
     for proto_name, (analysis_data, final_metrics) in protocol_map.items():
         total_packets = final_distribution.get(proto_name, 0)
         protocol_data[proto_name] = {
             "total_packets": total_packets,
-            "average_pps": round(total_packets / duration, 2) if duration > 0 else 0,
+            "average_pps": f"{round(total_packets / duration, 2) if duration > 0 else 0} PPS",
             **analysis_data
         }
 
         if proto_name == 'TCP':
             protocol_data[proto_name]['total_retransmissions'] = final_metrics.get('packet_loss', 0)
-            protocol_data[proto_name]['retransmissions_percentage'] = round(final_metrics.get('packet_loss_percentage', 0), 2)
+            protocol_data[proto_name]['retransmission_percentage'] = f"{round(final_metrics.get('packet_loss_percentage', 0), 2)} %"
+            protocol_data[proto_name]['average_latency'] = f"{analysis_data.get('average_latency_ms', 0)} ms"
         
         if proto_name == 'RTP':
             protocol_data[proto_name]['total_packet_loss'] = final_metrics.get('packet_loss', 0)
-            protocol_data[proto_name]['packet_loss_percentage'] = round(final_metrics.get('packet_loss_percentage', 0), 2)
+            protocol_data[proto_name]['packet_loss_percentage'] = f"{round(final_metrics.get('packet_loss_percentage', 0), 2)} %"
+            protocol_data[proto_name]['average_jitter'] = f"{analysis_data.get('average_jitter_ms', 0)} ms"
 
     # 6. Assemble the data payload for the AI
     full_analysis = {
@@ -149,14 +170,14 @@ async def generate_summary():
     1.  **summary**: Write a one-paragraph overview of the network session based on the provided data.
     2.  **breakdown**: Create a JSON array. Each object in the array MUST have three keys: `protocol`, `keyMetrics`, and `observations`.
     3.  **`protocol` key**: The value must be a string with the name of the metric category (e.g., "Overall Throughput", "IP Composition", "TCP").
-    4.  **`keyMetrics` key**: The value MUST be a single multi-line string, with each metric on a new line (using '\\n').
+    4.  **`keyMetrics` key**: The value MUST be a single multi-line string. Each line MUST be in a 'Key: Value' format (e.g., 'Total Packets: 1728\nAverage PPS: 192.0 PPS'). Use the metric names from the instructions below as the keys. You MUST include the units (e.g., PPS, ms, %, Kbps, Mbps) as provided in the data.
     5.  **`observations` key**: The value must be a single, concise sentence providing a key insight about the metrics for that category (e.g., "Traffic was exclusively IPv4.").
-    6.  For the **"Overall Throughput"** object, the `keyMetrics` string must contain: Total Packets, Average PPS, Average Inbound/Outbound Throughput, and Average Inbound/Outbound Goodput.
-    7.  For the **"IP Composition"** object, the `keyMetrics` string must contain: Total IPv4 Packets (with percentage) and Total IPv6 Packets (with percentage).
+    6.  For the **"Overall Throughput"** object, the `keyMetrics` string must contain: Total Packets, Average PPS, Average Inbound Throughput, Average Outbound Throughput, Average Inbound Goodput, and Average Outbound Goodput. The values for PPS and throughput/goodput already include their units.
+    7.  For the **"IP Composition"** object, the `keyMetrics` string must contain: Total IP Packets, Total IPv4 Packets (with percentage) and Total IPv6 Packets (with percentage).
     8.  For the **"Encryption Composition"** object, the `keyMetrics` string must contain: Total Encrypted Packets (with percentage) and Total Unencrypted Packets (with percentage).
-    9.  For the **"TCP"** object, the `keyMetrics` string must contain: Total Packets, Average PPS, Average Inbound/Outbound Throughput, Average Latency, Total Retransmissions, and Retransmission Percentage.
-    10. For the **"RTP"** object, the `keyMetrics` string must contain: Total Packets, Average PPS, Average Inbound/Outbound Throughput, Average Jitter, Total Packet Loss, and Packet Loss Percentage.
-    11. For all other protocols, the `keyMetrics` string must contain: Total Packets, Average PPS, and Average Inbound/Outbound Throughput.
+    9.  For the **"TCP"** object, the `keyMetrics` string must contain: Total Packets, Average PPS, Average Inbound Throughput, Average Outbound Throughput, Average Latency, Total Retransmissions, and Retransmission Percentage. The values for PPS, latency, throughput, and percentage already include their units.
+    10. For the **"RTP"** object, the `keyMetrics` string must contain: Total Packets, Average PPS, Average Inbound Throughput, Average Outbound Throughput, Average Jitter, Total Packet Loss, and Packet Loss Percentage. The values for PPS, jitter, throughput, and percentage already include their units.
+    11. For all other protocols, the `keyMetrics` string must contain: Total Packets, Average PPS, Average Inbound Throughput, and Average Outbound Throughput. The values for PPS and throughput already include their units.
     12. **You MUST NOT perform any calculations.** Your only job is to format the provided data and add a brief observation. Do not return an object for `keyMetrics`.
     13. You MUST generate a breakdown object for every protocol present in the protocol_data input, even if its total_packets count is 0.
 

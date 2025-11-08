@@ -3,6 +3,8 @@ import asyncio
 from ipaddress import ip_address
 import shared_state
 import time
+import socket
+from static_geolocation_db import STATIC_GEOLOCATION_DB
 
 # Rate limiting
 last_api_call_time = 0
@@ -19,49 +21,61 @@ def is_public_ip(ip_str):
         return False
 
 async def fetch_geolocation(session, ip):
-    """Fetch geolocation data for a single IP from ip-api.com"""
+    """Fetch geolocation and rDNS data for a single IP"""
     global last_api_call_time
-    
-    # Rate limiting - ensure we don't exceed 45 requests/minute
-    current_time = time.time()
-    time_since_last = current_time - last_api_call_time
-    if time_since_last < min_time_between_calls:
-        await asyncio.sleep(min_time_between_calls - time_since_last)
+    hostname = None
+
+    # Get rDNS hostname
+    try:
+        loop = asyncio.get_running_loop()
+        dns_lookup_task = loop.run_in_executor(None, socket.gethostbyaddr, ip)
+        hostname_tuple = await asyncio.wait_for(dns_lookup_task, timeout=1.5)
+        hostname = hostname_tuple[0]
+    except (asyncio.TimeoutError, socket.herror):
+        hostname = None
+    except Exception as e:
+        print(f"Error during rDNS lookup for {ip}: {e}")
+        hostname = None
+
+    # CHECK STATIC DATABASE FIRST and if not found here
+    # then only make API Call
+    if ip in STATIC_GEOLOCATION_DB:
+        static_data = STATIC_GEOLOCATION_DB[ip]
+        geo_data = {
+            "ip": ip,
+            "latitude": static_data['lat'],
+            "longitude": static_data['long'],
+            "city": static_data['city'],
+            "country": static_data['country'],
+            "hostname": hostname,
+        }
+        return geo_data
     
     try:
-        # Use JSON format for easier parsing
-        url = f"http://ip-api.com/json/{ip}?fields=status,lat,lon,city,country,query"
+        current_time = time.time()
+        time_since_last = current_time - last_api_call_time
+        if time_since_last < min_time_between_calls:
+            await asyncio.sleep(min_time_between_calls - time_since_last)
         
+        url = f"http://ip-api.com/json/{ip}?fields=status,lat,lon,city,country,query"
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
             last_api_call_time = time.time()
-            
-            if response.status == 429:  # Rate limited
-                print(f"Rate limited by ip-api.com, skipping {ip}")
-                return None
-            
             if response.status == 200:
                 data = await response.json()
-                
                 if data.get("status") == "success":
                     geo_data = {
                         "ip": data.get("query", ip),
                         "latitude": data.get("lat"),
                         "longitude": data.get("lon"),
                         "city": data.get("city", "Unknown"),
-                        "country": data.get("country", "Unknown")
+                        "country": data.get("country", "Unknown"),
+                        "hostname": hostname
                     }
                     return geo_data
-                else:
-                    print(f"Failed geolocation lookup for {ip}: {data}")
-                    return None
-                    
-    except asyncio.TimeoutError:
-        print(f"Timeout fetching geolocation for {ip}")
     except Exception as e:
         print(f"Error fetching geolocation for {ip}: {e}")
     
     return None
-
 
 async def process_geolocation_batch(ips_to_query):
     """Process a batch of IPs for geolocation lookup"""
@@ -69,49 +83,52 @@ async def process_geolocation_batch(ips_to_query):
         return
     
     async with aiohttp.ClientSession() as session:
-        tasks = []
+        # We process sequentially to respect rate limits
         for ip in ips_to_query:
-            tasks.append(fetch_geolocation(session, ip))
-        
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        for result in results:
+            result = await fetch_geolocation(session, ip)
+            
             if result and isinstance(result, dict):
-                ip = result["ip"]
+                # Add passively captured DNS name if it exists
+                if ip in shared_state.ip_to_dns:
+                    result["dns_name"] = shared_state.ip_to_dns[ip]
+                
+                # Add application info if it exists
+                if ip in shared_state.ip_stats:
+                    stats = shared_state.ip_stats[ip]
+                    result["app_info"] = stats.get("app_info")
+                
+                # Now, append the fully formed result
                 shared_state.new_geolocations.append(result)
 
 def extract_ips_from_packets(packets_data):
-    """Extract unique public IPs from packet data"""
+    """Extract unique public IPs from raw packet data"""
     public_ips = set()
-    
-    for packet in packets_data:
-        source = packet.get("source", "N/A")
-        destination = packet.get("destination", "N/A")
-        
-        for ip in [source, destination]:
-            if ip != "N/A" and is_public_ip(ip):
-                # Check if not in device IPs and not already queried
-                if (ip not in shared_state.ip_address and 
-                    ip not in shared_state.queried_public_ips):
-                    public_ips.add(ip)
-    
+    all_raw_packets = []
+    if shared_state.streams:
+        for packet_list in shared_state.streams.values():
+            all_raw_packets.extend(packet_list)
+
+    for parts in all_raw_packets:
+        try:
+            source = parts[2] or parts[16]
+            destination = parts[3] or parts[17]
+            for ip in [source, destination]:
+                if ip and ip != "N/A" and is_public_ip(ip):
+                    if (ip not in shared_state.ip_address and 
+                        ip not in shared_state.queried_public_ips):
+                        public_ips.add(ip)
+        except (IndexError, TypeError):
+            continue
     return public_ips
 
 async def geolocation_loop():
     """Background task that processes geolocation requests every 2 seconds"""
     while True:
-        await asyncio.sleep(2.0)  # Check every 2 seconds
-        
+        await asyncio.sleep(2.0)
         if not shared_state.capture_active:
             continue
-        
-        # Extract public IPs from recent packets
-        if shared_state.all_packets_history:
-            new_public_ips = extract_ips_from_packets(shared_state.all_packets_history)
-            
+        if shared_state.streams:
+            new_public_ips = extract_ips_from_packets(None)
             if new_public_ips:
-                # Mark these IPs as queried
                 shared_state.queried_public_ips.update(new_public_ips)
-                
-                # Process the batch
                 await process_geolocation_batch(list(new_public_ips))

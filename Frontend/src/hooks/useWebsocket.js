@@ -288,9 +288,22 @@ export default function useWebSocket(url) {
             break;
 
           case "command_response":
-            setCommandStatus(msg);
             setLoading(false);
-            if (msg.command === "start_capture" && msg.success) {
+
+            if (msg.command === "stop_capture_ack") {
+              // This is the INSTANT "Tshark stopped" message.
+              setCommandStatus(msg);
+              setTimeout(() => setCommandStatus(null), 1500); // 1.5-second timer
+
+            } else if (msg.command === "start_capture" && !msg.success) {
+              // This is the RED "Please wait..." ERROR.
+              setCommandStatus(msg);
+              setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
+              setTimeout(() => setCommandStatus(null), 5000); // 5-second timer
+
+            } else if (msg.command === "start_capture" && msg.success) {
+              // This is the GREEN "Start Capture" success.
+              setCommandStatus(msg);
               isStopping.current = false;
               setMetrics(prev => ({ ...(prev || {}), status: "running" }));
               setPackets([]); setMetricsHistory([]); setProtocolDistribution({});
@@ -305,37 +318,22 @@ export default function useWebSocket(url) {
               setQuicHistory([]); setIpv4History([]); setIpv6History([]);
               setDnsHistory([]); setIgmpHistory([]);
               setTcpFullMetricsHistory([]); setRtpFullMetricsHistory([]);
-              setIpv4FullMetricsHistory([]); setIpv6FullMetricsHistory([]);
-              setUdpFullMetricsHistory([]);
-              setQuicFullMetricsHistory([]);
-              setDnsFullMetricsHistory([]);
-              setIgmpFullMetricsHistory([]);
-
-              // *** ADDED: Reset KPI states ***
-              setTcpKPIs(null); setRtpKPIs(null); setUdpKPIs(null);
-              setQuicKPIs(null); setIpv4KPIs(null); setIpv6KPIs(null);
-              setDnsKPIs(null); setIgmpKPIs(null);
-
               setTopTalkers([]);
               setCaptureSummary(null); setSummaryStatus('idle');
               setGeolocations([]);
-            } else if (msg.command === "start_capture" && !msg.success) {
-                 setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
-            } else if (msg.command === "stop_capture" || msg.command === "stop_capture_ack") {
-                // Use 'stop_capture_ack' for the immediate feedback
-                if (msg.command === "stop_capture_ack") {
-                  setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
-                  isStopping.current = false;
-                }
-                // The final 'stop_capture' command will contain the summary
-                if (msg.summary) {
-                    setCaptureSummary(msg.summary); setSummaryStatus('ready');
-                }
+              setTimeout(() => setCommandStatus(null), 3000); // 3-second timer
+
+            } else if (msg.command === "stop_capture") {
+              // This is the FINAL "stop_capture" with the summary.
+              // Do NOT show a popup. Just open the modal.
+              setMetrics(prev => ({ ...(prev || {}), status: "stopped" }));
+              isStopping.current = false;
+              if (msg.summary) {
+                  setCaptureSummary(msg.summary); setSummaryStatus('ready');
+              } else { 
+                  setSummaryStatus('idle'); 
+              }
             }
-             setTimeout(() => setCommandStatus(null), 5000);
-            break;
-          default:
-             console.log("Received unknown message type:", msg.type);
             break;
         }
       } catch (e) {
