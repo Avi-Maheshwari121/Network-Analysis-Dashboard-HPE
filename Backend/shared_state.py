@@ -316,3 +316,5 @@ running_state = {
         'cumulative_duration': 0
     }
 }
+
+last_periodic_summary_time = None
