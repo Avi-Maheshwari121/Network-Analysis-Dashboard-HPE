@@ -7,6 +7,9 @@
  import TrafficCompositionPage from "./pages/TrafficCompositionPage";
  import GeoMapPage from "./pages/GeoMapPage";
  import useWebSocket from "./hooks/useWebsocket.js";
+ import PeriodicSummaryBot from "./components/PeriodicSummaryBot";
+ // *** 1. IMPORT THE NEW PAGE ***
+ import SummaryHistoryPage from "./pages/SummaryHistoryPage";
 
  const WEBSOCKET_URL = "ws://localhost:8765";
 
@@ -32,7 +35,7 @@
      tcpHistory, rtpHistory, udpHistory, quicHistory, dnsHistory, igmpHistory,
      ipv4History, ipv6History,
      
-     // *** ADDED: Get all KPI objects ***
+     // Get all KPI objects
      tcpKPIs, rtpKPIs, udpKPIs, quicKPIs, dnsKPIs, igmpKPIs,
      ipv4KPIs, ipv6KPIs,
      
@@ -49,6 +52,10 @@
      encryptionComposition,
      topTalkers,
      geolocations,
+     
+     //summary history and current summary for the bot
+     periodicSummary,
+     periodicSummaryHistory,
    } = useWebSocket(WEBSOCKET_URL);
 
 return (
@@ -87,7 +94,7 @@ return (
              // Throughput history
              tcpHistory={tcpHistory} rtpHistory={rtpHistory} udpHistory={udpHistory} quicHistory={quicHistory} dnsHistory={dnsHistory} igmpHistory={igmpHistory}
              
-             // *** ADDED: Pass all KPI objects down ***
+             // Pass all KPI objects down
              tcpKPIs={tcpKPIs} rtpKPIs={rtpKPIs} udpKPIs={udpKPIs} quicKPIs={quicKPIs} dnsKPIs={dnsKPIs} igmpKPIs={igmpKPIs}
              
              // Full metrics history
@@ -121,8 +128,19 @@ return (
              metrics={metrics}
              geolocations={geolocations}
            />
+         ) : view === "summaryhistory" ? (
+           <SummaryHistoryPage
+             periodicSummaryHistory={periodicSummaryHistory}
+           />
          ) : null}
        </main>
+
+       {/* *** 4. RENDER THE BOT (AND PASS SETVIEW) *** */}
+       <PeriodicSummaryBot 
+         periodicSummary={periodicSummary} 
+         captureStatus={metrics?.status}
+         setActiveView={setView}
+       />
      </div>
    );
  }

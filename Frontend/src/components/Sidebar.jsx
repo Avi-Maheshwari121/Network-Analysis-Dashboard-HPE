@@ -22,6 +22,7 @@ export default function Sidebar({ activeView, setActiveView }) {
         <NavButton view="protocolstats">Protocol Stats</NavButton>
         <NavButton view="trafficcomposition">Traffic Composition</NavButton>
         <NavButton view="geomap">Geo Map</NavButton>
+        <NavButton view="summaryhistory">Summary History</NavButton>
       </nav>
     </aside>
   );

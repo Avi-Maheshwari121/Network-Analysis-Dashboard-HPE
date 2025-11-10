@@ -116,6 +116,8 @@ export default function Dashboard({
         onShowSummary={() => setIsSummaryModalOpen(true)}
         captureDuration={captureDuration}
       />
+
+
       <MetricCards metrics={metrics} />
       
       {/* Overall Throughput and Packets Per Second - Side by Side */}

@@ -179,9 +179,7 @@ export default function ProtocolMetricsDisplay({
         <p className="text-text-secondary mb-4">No specific metrics available for {protocolName} in this capture.</p>
       )}
 
-      {/* --- Row 3: Session KPI Bar --- */}
-      {/* *** CHANGED: Pass the safe kpiData object, not the null kpis prop *** */}
-      <KpiBar kpis={kpiData} details={detailsToShow} />
+     
 
       {/* --- Row 4: Charts Area (Layout is correct now) --- */}
       <div className="mt-6 space-y-6">
@@ -216,8 +214,12 @@ export default function ProtocolMetricsDisplay({
                 />
               </div>
             )}
+            
           </div>
         )}
+        {/* --- Row 3: Session KPI Bar --- */}
+      {/* *** CHANGED: Pass the safe kpiData object, not the null kpis prop *** */}
+      <KpiBar kpis={kpiData} details={detailsToShow} />
 
         {/* Second chart row (for Latency/Jitter) */}
         {(showLatencyGraph || showJitterGraph) && (
@@ -237,6 +239,7 @@ export default function ProtocolMetricsDisplay({
                 />
               </div>
             )}
+            
             {showJitterGraph && (
               <div className={`h-72 ${showThroughputGraph && showPpsGraph ? 'md:col-span-2' : ''}`}>
                 <MetricChart
@@ -252,6 +255,7 @@ export default function ProtocolMetricsDisplay({
                 />
               </div>
             )}
+             
           </div>
         )}
       </div>

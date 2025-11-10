@@ -5,3 +5,18 @@
 body {
   @apply bg-base-dark text-text-main;
 }
+
+/* *** ADDED FOR SUMMARY BOT BUBBLE ***
+  This creates the little triangle arrow at the
+  bottom of the summary popup, pointing to the bot icon.
+*/
+.summary-bot-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%; /* At the bottom of the bubble */
+  left: 1.5rem; /* 24px, to align with the bot icon center */
+  margin-left: -5px; /* Offset to center the arrow */
+  border-width: 6px;
+  border-style: solid;
+  border-color: #161B22 transparent transparent transparent; /* Matches surface-dark */
+}
