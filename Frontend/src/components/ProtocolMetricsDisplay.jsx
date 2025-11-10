@@ -14,13 +14,7 @@ const StatCard = ({ title, value, unit = '', subValue = '' }) => (
         {value} {unit && <span className="text-base">{unit}</span>}
       </p>
     </div>
-    <div className="h-4"> 
-      {subValue ? (
-        <p className="text-xs text-text-secondary mt-1">{subValue}</p>
-      ) : (
-        <p className="text-xs text-text-secondary mt-1">&nbsp;</p>
-      )}
-    </div>
+   
   </div>
 );
 
@@ -179,6 +173,10 @@ export default function ProtocolMetricsDisplay({
         <p className="text-text-secondary mb-4">No specific metrics available for {protocolName} in this capture.</p>
       )}
 
+       {/* --- Row 3: Session KPI Bar --- */}
+      {/* *** CHANGED: Pass the safe kpiData object, not the null kpis prop *** */}
+      <KpiBar kpis={kpiData} details={detailsToShow} />
+
      
 
       {/* --- Row 4: Charts Area (Layout is correct now) --- */}
@@ -217,9 +215,7 @@ export default function ProtocolMetricsDisplay({
             
           </div>
         )}
-        {/* --- Row 3: Session KPI Bar --- */}
-      {/* *** CHANGED: Pass the safe kpiData object, not the null kpis prop *** */}
-      <KpiBar kpis={kpiData} details={detailsToShow} />
+       
 
         {/* Second chart row (for Latency/Jitter) */}
         {(showLatencyGraph || showJitterGraph) && (

@@ -93,7 +93,8 @@ export default function PeriodicSummaryBot({ periodicSummary, captureStatus, set
     : '';
 
   return (
-    <div className="fixed bottom-6 left-6 z-50">
+    // *** THIS IS THE FIX: Changed z-50 to z-[1000] ***
+    <div className="fixed bottom-6 left-6 z-[1000]">
       {/* Summary Bubble - Renders based on state */}
       {isOpen && (
         <div

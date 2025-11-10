@@ -307,6 +307,7 @@ export default function useWebSocket(url) {
             if (msg.command === "stop_capture_ack") {
               // This is the INSTANT "Tshark stopped" message.
               setCommandStatus(msg);
+              setMetrics(prev => ({ ...(prev || {}), status: "stopped" })); //to stop the timer immediately
               setTimeout(() => setCommandStatus(null), 1500); // 1.5-second timer
 
             } else if (msg.command === "start_capture" && !msg.success) {
