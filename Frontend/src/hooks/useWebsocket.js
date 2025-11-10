@@ -65,6 +65,10 @@ export default function useWebSocket(url) {
   // AI Summary States
   const [captureSummary, setCaptureSummary] = useState(null);
   const [summaryStatus, setSummaryStatus] = useState('idle');
+  
+  // *** 1. ADD NEW STATES FOR PERIODIC SUMMARY ***
+  const [periodicSummary, setPeriodicSummary] = useState(null); // For the notification
+  const [periodicSummaryHistory, setPeriodicSummaryHistory] = useState([]); // For the log
 
   useEffect(() => {
     let isInitialized = false;
@@ -151,6 +155,9 @@ export default function useWebSocket(url) {
              setTopTalkers(msg.top_talkers || []);
              setCaptureSummary(null); setSummaryStatus('idle');
              setGeolocations([]);
+             // *** 2. RESET PERIODIC SUMMARY ON INIT ***
+             setPeriodicSummary(null);
+             setPeriodicSummaryHistory([]);
             break;
 
           case "interfaces_response":
@@ -287,12 +294,20 @@ export default function useWebSocket(url) {
             }
             break;
 
+          // *** 3. ADD CASE FOR THE NEW MESSAGE TYPE ***
+          case "periodic_summary":
+            console.log("Received periodic summary:", msg.summary);
+            setPeriodicSummary(msg.summary); // Set for notification
+            setPeriodicSummaryHistory(prev => [...prev, msg.summary]); // Add to log
+            break;
+
           case "command_response":
             setLoading(false);
 
             if (msg.command === "stop_capture_ack") {
               // This is the INSTANT "Tshark stopped" message.
               setCommandStatus(msg);
+              setMetrics(prev => ({ ...(prev || {}), status: "stopped" })); //to stop the timer immediately
               setTimeout(() => setCommandStatus(null), 1500); // 1.5-second timer
 
             } else if (msg.command === "start_capture" && !msg.success) {
@@ -321,6 +336,9 @@ export default function useWebSocket(url) {
               setTopTalkers([]);
               setCaptureSummary(null); setSummaryStatus('idle');
               setGeolocations([]);
+              // *** 4. RESET PERIODIC SUMMARY ON START ***
+              setPeriodicSummary(null);
+              setPeriodicSummaryHistory([]);
               setTimeout(() => setCommandStatus(null), 3000); // 3-second timer
 
             } else if (msg.command === "stop_capture") {
@@ -375,6 +393,7 @@ export default function useWebSocket(url) {
     ws.current.send(JSON.stringify({ command, ...payload }));
   };
 
+  // *** 5. EXPORT THE NEW HISTORY STATE ***
   return {
     wsConnected, metrics, packets, commandStatus, loading, error, sendCommand, interfaces, metricsHistory, protocolDistribution,
     // Protocol metrics
@@ -399,5 +418,8 @@ export default function useWebSocket(url) {
     encryptionComposition,
     topTalkers,
     geolocations,
+    // Export the new summary states
+    periodicSummary, 
+    periodicSummaryHistory,
   };
 }

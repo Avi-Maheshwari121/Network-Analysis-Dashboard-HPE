@@ -36,8 +36,8 @@ export default function MetricCards({ metrics }) {
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-6">
       <Card title="In Throughput" value={inboundThrpt.value} unit={inboundThrpt.unit} icon={ArrowDownCircle} />
       <Card title="Out Throughput" value={outboundThrpt.value} unit={outboundThrpt.unit} icon={ArrowUpCircle} />
-      <Card title="Inbound Goodput" value={inboundGood.value} unit={inboundGood.unit} icon={Target} />
-      <Card title="Outbound Goodput" value={outboundGood.value} unit={outboundGood.unit} icon={ShieldCheck} />
+      <Card title="Inbound Goodput" value={inboundGood.value} unit={inboundGood.unit} icon={ArrowDownCircle} />
+      <Card title="Outbound Goodput" value={outboundGood.value} unit={outboundGood.unit} icon={ArrowUpCircle} />
       <Card title="Packets/Sec" value={pps} icon={Activity} />
     </div>
   );
