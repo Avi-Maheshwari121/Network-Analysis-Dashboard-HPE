@@ -77,6 +77,68 @@ async def data_collection_loop():
                     del shared_state.connected_clients[client]
             print(f"Cleaned up {len(disconnected_clients)} disconnected clients.")
 
+
+async def periodic_summary_loop():
+    """
+    Generates and sends periodic LLM summaries every 60 seconds during active capture.
+    """
+    while True:
+        await asyncio.sleep(10)  # Check every 10 seconds
+        
+        # Only generate if capture is active and clients are connected
+        if not capture_manager.is_capture_active() or not shared_state.connected_clients:
+            continue
+        
+        # Check if session has started
+        if not hasattr(shared_state, 'session_start_time') or shared_state.session_start_time is None:
+            continue
+        
+        # Calculate time since session start
+        session_duration = (datetime.now() - shared_state.session_start_time).total_seconds()
+        
+        # Initialize last_periodic_summary_time if not set
+        if shared_state.last_periodic_summary_time is None:
+            shared_state.last_periodic_summary_time = shared_state.session_start_time
+        
+        # Calculate time since last periodic summary
+        time_since_last_summary = (datetime.now() - shared_state.last_periodic_summary_time).total_seconds()
+        
+        # Generate summary if 60 seconds have passed and session has been running for at least 60 seconds
+        if time_since_last_summary >= 60 and session_duration >= 60:
+            print(f"Generating periodic summary at {session_duration:.0f}s...")
+            
+            try:
+                # Generate the periodic summary
+                summary = await llm_summarizer.generate_periodic_summary()
+                
+                # Send to all connected clients
+                disconnected_clients = set()
+                for client in list(shared_state.connected_clients.keys()):
+                    data_to_send = {
+                        "type": "periodic_summary",
+                        "summary": summary
+                    }
+                    
+                    try:
+                        await client.send(json.dumps(data_to_send))
+                    except websockets.exceptions.ConnectionClosed:
+                        disconnected_clients.add(client)
+                
+                # Clean up disconnected clients
+                if disconnected_clients:
+                    for client in disconnected_clients:
+                        if client in shared_state.connected_clients:
+                            del shared_state.connected_clients[client]
+                
+                # Update the last summary time
+                shared_state.last_periodic_summary_time = datetime.now()
+                print(f"Periodic summary sent to {len(shared_state.connected_clients)} clients")
+                
+            except Exception as e:
+                print(f"Error generating periodic summary: {e}")
+
+
+
 async def handle_stop_capture_task(websocket, data):
     """
     Handles the entire stop_capture flow as a background task.
@@ -114,7 +176,7 @@ async def handle_stop_capture_task(websocket, data):
             print("Summary generated.")
         except Exception as e:
             error_msg = f"Error during summary: {e}"
-            print(error_msg)
+            print(f"Exception: {error_msg}")
             # Send an error summary so the frontend knows it failed
             summary = {"summary": error_msg, "breakdown": []} 
         finally:
@@ -167,6 +229,7 @@ async def handle_command(command, data):
             capture_manager.clear_all_packets()
             interface = data.get("interface", "1")
             shared_state.session_start_time = datetime.now()
+            shared_state.last_periodic_summary_time = None
             success, msg = await capture_manager.start_tshark(interface)
             if success:
                 metrics_calculator.update_metrics_status("running")
@@ -236,7 +299,7 @@ async def websocket_handler(websocket):
                     await websocket.send(json.dumps(response))
 
     except Exception as e:
-        print(e)
+        print(f"Exception: {e}")
         
     finally:
         if websocket in shared_state.connected_clients:
@@ -272,6 +335,7 @@ async def start_websocket_server():
     
     asyncio.create_task(data_collection_loop())
     asyncio.create_task(geolocation_handler.geolocation_loop())
+    asyncio.create_task(periodic_summary_loop()) 
     
     server = await websockets.serve(
         websocket_handler, 

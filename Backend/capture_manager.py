@@ -447,6 +447,8 @@ def resetSharedState():
         }
     }
 
+    shared_state.last_periodic_summary_time = None
+
 
 async def stop_tshark():
     """Stop tshark packet capture process"""
@@ -468,7 +470,7 @@ async def stop_tshark():
                 await shared_state.tshark_proc.wait()
                 print("Tshark killed")
             except Exception as e:
-                print(e)
+                print(f"Exception: {e}")
 
         except Exception as e:
             print(f"Error stopping tshark: {e}")
@@ -554,8 +556,11 @@ async def capture_packets(duration):
                     shared_state.tshark_proc.stdout.readline(),
                     timeout = 1.0
                 )
+            except asyncio.TimeoutError:
+                # Normal timeout - no data within 1 second, just continue
+                continue
             except Exception as e:
-                print(e)
+                print(f"Exception: {e}")
                 continue
             
             if not line_bytes:
@@ -611,7 +616,7 @@ async def capture_packets(duration):
                            shared_state.ip_stats[server_ip]["app_info"] = app_info
 
             except Exception as e:
-                print(e)
+                print(f"Exception: {e}")
            
             formatted_packet = parse_and_store_packet(parts)
             if formatted_packet:

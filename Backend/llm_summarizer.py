@@ -200,3 +200,231 @@ async def generate_summary():
     except Exception as e:
         print(f"CRITICAL: AI summary failed or returned invalid JSON. Error: {e}.")
         return {"summary": "The AI model could not be reached or failed to process the data.", "breakdown": []}
+    
+
+def safe_get(d, *path, default=0.0):
+        cur = d
+        for k in path:
+            if not isinstance(cur, dict) or k not in cur:
+                return default
+            cur = cur[k]
+        return cur
+
+
+async def generate_periodic_summary():
+    if not GEMINI_API_KEY:
+        return {"summary": "AI summary is unavailable.", "timestamp": datetime.now().isoformat()}
+
+    if not hasattr(shared_state, 'session_start_time') or shared_state.session_start_time is None:
+        return {"summary": "No data available.", "timestamp": datetime.now().isoformat()}
+
+    # Calculate current session duration
+    duration = (datetime.now() - shared_state.session_start_time).total_seconds()
+
+    # Get protocol distribution and total packets
+    final_distribution = shared_state.metrics_state.get("protocol_distribution", {})
+    total_packets = sum(final_distribution.values())
+    
+    # Get top 3 protocols
+    sorted_protocols = sorted(final_distribution.items(), key=lambda x: x[1], reverse=True)
+    top_3_protocols = sorted_protocols[:3] if len(sorted_protocols) >= 3 else sorted_protocols
+
+    # Helper function to safely get nested values
+    rs = getattr(shared_state, "running_state", {})
+
+    # === OVERALL METRICS - average only ===
+    overall_in_avg = safe_get(rs, "overall", "inbound_throughput_avg")
+    overall_out_avg = safe_get(rs, "overall", "outbound_throughput_avg")
+
+    # === TCP METRICS - average only ===
+    tcp_in_avg = safe_get(rs, "tcp", "inbound_throughput_avg")
+    tcp_out_avg = safe_get(rs, "tcp", "outbound_throughput_avg")
+    tcp_lat_avg = safe_get(rs, "tcp", "latency_avg")
+    tcp_loss_cnt = shared_state.tcp_metrics.get("packet_loss", 0)
+    tcp_loss_pct = shared_state.tcp_metrics.get("packet_loss_percentage", 0.0)
+
+    # === RTP METRICS - average only ===
+    rtp_in_avg = safe_get(rs, "rtp", "inbound_throughput_avg")
+    rtp_out_avg = safe_get(rs, "rtp", "outbound_throughput_avg")
+    rtp_jit_avg = safe_get(rs, "rtp", "jitter_avg")
+    rtp_loss_cnt = shared_state.rtp_metrics.get("packet_loss", 0)
+    rtp_loss_pct = shared_state.rtp_metrics.get("packet_loss_percentage", 0.0)
+
+    # === UDP METRICS - average only ===
+    udp_in_avg = safe_get(rs, "udp", "inbound_throughput_avg")
+    udp_out_avg = safe_get(rs, "udp", "outbound_throughput_avg")
+
+    # === QUIC METRICS - average only ===
+    quic_in_avg = safe_get(rs, "quic", "inbound_throughput_avg")
+    quic_out_avg = safe_get(rs, "quic", "outbound_throughput_avg")
+
+    # === DNS METRICS - average only ===
+    dns_in_avg = safe_get(rs, "dns", "inbound_throughput_avg")
+    dns_out_avg = safe_get(rs, "dns", "outbound_throughput_avg")
+
+    # === IGMP METRICS - average only ===
+    igmp_in_avg = safe_get(rs, "igmp", "inbound_throughput_avg")
+    igmp_out_avg = safe_get(rs, "igmp", "outbound_throughput_avg")
+
+    # === IP COMPOSITION ===
+    ipv4_cumulative = shared_state.ip_composition.get("ipv4_packets_cumulative", 0)
+    ipv6_cumulative = shared_state.ip_composition.get("ipv6_packets_cumulative", 0)
+    ipv4_pct = shared_state.ip_composition.get("ipv4_percentage", 0)
+    ipv6_pct = shared_state.ip_composition.get("ipv6_percentage", 0)
+
+    # === ENCRYPTION COMPOSITION ===
+    encrypted_cumulative = shared_state.encryption_composition.get("encrypted_packets_cumulative", 0)
+    unencrypted_cumulative = shared_state.encryption_composition.get("unencrypted_packets_cumulative", 0)
+    encrypted_pct = shared_state.encryption_composition.get("encrypted_percentage", 0)
+    unencrypted_pct = shared_state.encryption_composition.get("unencrypted_percentage", 0)
+
+    # === BUILD PROTOCOL_DATA - simplified (no peak, no goodput) ===
+    protocol_data = {}
+    
+    # TCP
+    tcp_packets = final_distribution.get("TCP", 0)
+    protocol_data['TCP'] = {
+        "total_packets": tcp_packets,
+        "average_pps": f"{round(tcp_packets / duration, 2) if duration > 0 else 0} PPS",
+        "average_inbound_throughput": _format_throughput(tcp_in_avg),
+        "average_outbound_throughput": _format_throughput(tcp_out_avg),
+        "average_latency": f"{round(tcp_lat_avg, 2)} ms",
+        "total_retransmissions": int(tcp_loss_cnt),
+        "retransmission_percentage": f"{round(tcp_loss_pct, 2)} %",
+    }
+    
+    # RTP
+    rtp_packets = final_distribution.get("RTP", 0)
+    protocol_data['RTP'] = {
+        "total_packets": rtp_packets,
+        "average_pps": f"{round(rtp_packets / duration, 2) if duration > 0 else 0} PPS",
+        "average_inbound_throughput": _format_throughput(rtp_in_avg),
+        "average_outbound_throughput": _format_throughput(rtp_out_avg),
+        "average_jitter": f"{round(rtp_jit_avg, 2)} ms",
+        "total_packet_loss": int(rtp_loss_cnt),
+        "packet_loss_percentage": f"{round(rtp_loss_pct, 2)} %",
+    }
+    
+    # UDP
+    udp_packets = final_distribution.get("UDP", 0)
+    protocol_data['UDP'] = {
+        "total_packets": udp_packets,
+        "average_pps": f"{round(udp_packets / duration, 2) if duration > 0 else 0} PPS",
+        "average_inbound_throughput": _format_throughput(udp_in_avg),
+        "average_outbound_throughput": _format_throughput(udp_out_avg),
+    }
+    
+    # QUIC
+    quic_packets = final_distribution.get("QUIC", 0)
+    protocol_data['QUIC'] = {
+        "total_packets": quic_packets,
+        "average_pps": f"{round(quic_packets / duration, 2) if duration > 0 else 0} PPS",
+        "average_inbound_throughput": _format_throughput(quic_in_avg),
+        "average_outbound_throughput": _format_throughput(quic_out_avg),
+    }
+    
+    # DNS
+    dns_packets = final_distribution.get("DNS", 0)
+    protocol_data['DNS'] = {
+        "total_packets": dns_packets,
+        "average_pps": f"{round(dns_packets / duration, 2) if duration > 0 else 0} PPS",
+        "average_inbound_throughput": _format_throughput(dns_in_avg),
+        "average_outbound_throughput": _format_throughput(dns_out_avg),
+    }
+    
+    # IGMP
+    igmp_packets = final_distribution.get("IGMP", 0)
+    protocol_data['IGMP'] = {
+        "total_packets": igmp_packets,
+        "average_pps": f"{round(igmp_packets / duration, 2) if duration > 0 else 0} PPS",
+        "average_inbound_throughput": _format_throughput(igmp_in_avg),
+        "average_outbound_throughput": _format_throughput(igmp_out_avg),
+    }
+
+    # Prepare comprehensive data for AI (used ONLY for prompt, NOT sent to user)
+    periodic_data = {
+        "session_duration_seconds": round(duration, 2),
+        "total_packets_captured": total_packets,
+        "average_pps": round(total_packets / duration, 2) if duration > 0 else 0,
+        
+        "top_3_protocols": [{"protocol": p[0], "packets": p[1]} for p in top_3_protocols],
+        
+        # Overall metrics - average only
+        "overall": {
+            "inbound_throughput_avg": _format_throughput(overall_in_avg),
+            "outbound_throughput_avg": _format_throughput(overall_out_avg),
+        },
+        
+        # IP composition
+        "ip_composition": {
+            "ipv4_packets": ipv4_cumulative,
+            "ipv6_packets": ipv6_cumulative,
+            "ipv4_percentage": round(ipv4_pct, 2),
+            "ipv6_percentage": round(ipv6_pct, 2),
+        },
+        
+        # Encryption composition
+        "encryption": {
+            "encrypted_packets": encrypted_cumulative,
+            "unencrypted_packets": unencrypted_cumulative,
+            "encrypted_percentage": round(encrypted_pct, 2),
+            "unencrypted_percentage": round(unencrypted_pct, 2),
+        },
+        
+        # Protocol data - simplified
+        "protocol_data": protocol_data,
+    }
+
+    # Create a focused prompt for periodic summaries
+    prompt = f"""
+        You are a network analyst providing a brief status update.
+        Generate a JSON object with ONLY a "summary" key containing a SHORT 3-4 sentence update.
+
+        Focus on:
+        - Current traffic volume, top protocols, and average throughput
+        - IP version distribution (IPv4 vs IPv6) and encryption status
+        - Any notable performance issues for TCP (latency, retransmissions) and RTP (jitter, packet loss) or any other protocol
+        - Overall network health status
+
+        Keep it concise and actionable. Highlight only the most important insights.
+
+        **Current Network Data:**
+        {json.dumps(periodic_data, indent=2)}
+
+        Return ONLY valid JSON: {{"summary": "your brief summary here"}}
+        """
+
+    try:
+        model = genai.GenerativeModel('models/gemini-flash-latest')
+        response = await model.generate_content_async(prompt)
+        raw_text = response.text
+        
+        # Extract JSON
+        json_start = raw_text.find('{')
+        json_end = raw_text.rfind('}') + 1
+        
+        if json_start != -1 and json_end != 0:
+            clean_json_str = raw_text[json_start:json_end]
+            result = json.loads(clean_json_str)
+            result['timestamp'] = datetime.now().isoformat()
+            result['duration_seconds'] = round(duration, 2)
+            return result
+        else:
+            raise ValueError("No valid JSON in AI response")
+            
+    except Exception as e:
+        print(f"Periodic summary generation failed: {e}")
+        # Fallback summary with key metrics
+        fallback = (
+            f"Network: {total_packets} packets, {_format_throughput(overall_in_avg)} in / "
+            f"{_format_throughput(overall_out_avg)} out. "
+            f"Top protocol: {top_3_protocols[0][0] if top_3_protocols else 'None'}. "
+            f"TCP latency: {round(tcp_lat_avg, 2)} ms avg, retransmissions: {round(tcp_loss_pct, 2)}%. "
+            f"RTP jitter: {round(rtp_jit_avg, 2)} ms avg, loss: {round(rtp_loss_pct, 2)}%. "
+            f"IPv4: {round(ipv4_pct, 2)}%, Encrypted: {round(encrypted_pct, 2)}%."
+        )
+        return {
+            "summary": fallback,
+            "timestamp": datetime.now().isoformat(),
+            "duration_seconds": round(duration, 2)
+        }
