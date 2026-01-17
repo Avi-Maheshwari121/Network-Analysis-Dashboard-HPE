@@ -163,7 +163,6 @@ STATIC_GEOLOCATION_DB = {
     '210.188.0.1': {'city': 'Tokyo', 'country': 'JP', 'lat': 35.676, 'long': 139.650},
 
     # ============ ASIA - KOREA ============
-    '1.0.0.1': {'city': 'Seoul', 'country': 'KR', 'lat': 37.566, 'long': 126.978},
     '210.107.0.1': {'city': 'Seoul', 'country': 'KR', 'lat': 37.566, 'long': 126.978},
 
     # ============ ASIA - SINGAPORE ============
@@ -211,7 +210,6 @@ STATIC_GEOLOCATION_DB = {
     '196.32.0.1': {'city': 'Johannesburg', 'country': 'ZA', 'lat': -26.205, 'long': 28.050},
 
     # ============ MIDDLE EAST - UAE ============
-    '212.111.0.1': {'city': 'Dubai', 'country': 'AE', 'lat': 25.276, 'long': 55.308},
     '194.50.0.1': {'city': 'Dubai', 'country': 'AE', 'lat': 25.276, 'long': 55.308},
 
     # ============ MIDDLE EAST - SAUDI ============
@@ -231,5 +229,4 @@ STATIC_GEOLOCATION_DB = {
     '207.244.93.196': {'city': 'Miami', 'country': 'US', 'lat': 25.761, 'long': -80.191},
     '198.41.0.4': {'city': 'Washington', 'country': 'US', 'lat': 38.897, 'long': -77.036},
     '192.58.128.30': {'city': 'Los Angeles', 'country': 'US', 'lat': 34.053, 'long': -118.243},
-    '205.244.169.1': {'city': 'Denver', 'country': 'US', 'lat': 39.739, 'long': -104.990},
 }

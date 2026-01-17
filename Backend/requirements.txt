@@ -6,12 +6,9 @@ psutil==7.1.0
 # WebSocket Support
 websockets==15.0.1
 
-# Note: TShark/Wireshark must be installed separately on your system
-# Download from: https://www.wireshark.org/download.html
-
 # For Google Gemini API
 google-generativeai==0.7.1
-python-dotenv==1.0.1
+python-dotenv==1.2.1
 
 # Geo Map
-aiohttp
+aiohttp==3.12.13

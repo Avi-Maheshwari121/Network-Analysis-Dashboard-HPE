@@ -1,7 +1,17 @@
 """
-Shared state module for Network Monitoring Dashboard
-Contains all global variables used across modules
+Shared mutable runtime state for the Network Analysis Dashboard.
+
+This module intentionally defines module-level variables that represent
+mutable application state (not constants). These variables are updated
+at runtime by multiple components such as the capture manager,
+WebSocket server, metrics calculator, and summarization logic.
+
+Because these are runtime state holders and not constants, they follow
+snake_case naming instead of UPPER_CASE. And since pylint consider them 
+as constants which is not true and therefore disabled invalid-name error here.
 """
+
+# pylint: disable=invalid-name
 
 # Duration value
 capture_duration = 1.5
@@ -38,7 +48,7 @@ protocol_distribution = {
 metrics_state = {
     "inbound_throughput": 0.0,
     "outbound_throughput": 0.0,
-    "inbound_goodput": 0.0,      
+    "inbound_goodput": 0.0,
     "outbound_goodput": 0.0,
     "status": "stopped",
     "last_update": None,
@@ -56,7 +66,7 @@ metrics_state = {
     "outbound_goodput_avg": 0.0
 }
 
-# Packet loss 
+# Packet loss
 tcp_lost_packets_total = 0
 tcp_expected_packets_total = 0
 rtp_lost_packets_total = 0
@@ -185,7 +195,7 @@ encryption_composition = {
     "unencrypted_packets": 0,
     "encrypted_packets_cumulative": 0,
     "unencrypted_packets_cumulative": 0,
-    "total_packets": 0,         
+    "total_packets": 0,
     "encrypted_percentage": 0.0,
     "unencrypted_percentage": 0.0
 }
@@ -227,7 +237,7 @@ running_state = {
         'outbound_goodput_avg': 0.0,
         'cumulative_duration': 0
     },
-    
+
     'tcp': {
         'inbound_throughput_peak': 0.0,
         'inbound_throughput_sum': 0.0,
@@ -241,7 +251,7 @@ running_state = {
         'latency_count': 0,
         'cumulative_duration': 0
     },
-    
+
     'udp': {
         'inbound_throughput_peak': 0.0,
         'inbound_throughput_sum': 0.0,
@@ -251,7 +261,7 @@ running_state = {
         'outbound_throughput_avg': 0.0,
         'cumulative_duration': 0
     },
-    
+
     'rtp': {
         'inbound_throughput_peak': 0.0,
         'inbound_throughput_sum': 0.0,
@@ -265,7 +275,7 @@ running_state = {
         'jitter_count': 0,
         'cumulative_duration': 0
     },
-    
+
     'quic': {
         'inbound_throughput_peak': 0.0,
         'inbound_throughput_sum': 0.0,
@@ -275,7 +285,7 @@ running_state = {
         'outbound_throughput_avg': 0.0,
         'cumulative_duration': 0
     },
-    
+
     'dns': {
         'inbound_throughput_peak': 0.0,
         'inbound_throughput_sum': 0.0,
@@ -285,7 +295,7 @@ running_state = {
         'outbound_throughput_avg': 0.0,
         'cumulative_duration': 0
     },
-    
+
     'igmp': {
         'inbound_throughput_peak': 0.0,
         'inbound_throughput_sum': 0.0,
@@ -295,7 +305,7 @@ running_state = {
         'outbound_throughput_avg': 0.0,
         'cumulative_duration': 0
     },
-    
+
     'ipv4': {
         'inbound_throughput_peak': 0.0,
         'inbound_throughput_sum': 0.0,
@@ -305,7 +315,7 @@ running_state = {
         'outbound_throughput_avg': 0.0,
         'cumulative_duration': 0
     },
-    
+
     'ipv6': {
         'inbound_throughput_peak': 0.0,
         'inbound_throughput_sum': 0.0,
