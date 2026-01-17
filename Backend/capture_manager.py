@@ -1,11 +1,13 @@
+"""Packet capture and session management logic."""
+
+import re
+import socket
+import asyncio
 import subprocess
 import time
 from datetime import datetime
-import shared_state
-import re
 import psutil
-import socket
-import asyncio
+import shared_state
 import app_detector
 
 
@@ -26,11 +28,11 @@ def get_device_ips():
     device_ips = []
     ipv4_list = []
     ipv6_list = []
-    
+
     try:
         all_addrs = psutil.net_if_addrs()
-        
-        for iface_name, addrs in all_addrs.items():
+
+        for _iface_name, addrs in all_addrs.items():
             for addr in addrs:
                 if addr.family == socket.AF_INET:  # IPv4
                     device_ips.append(addr.address)
@@ -39,16 +41,16 @@ def get_device_ips():
                     ip6_without_zone = addr.address.split('%')[0]  # strip %zone
                     device_ips.append(ip6_without_zone)
                     ipv6_list.append(ip6_without_zone)
-        
+
         # Remove duplicates
         device_ips = list(set(device_ips))
         ipv4_list = list(set(ipv4_list))
         ipv6_list = list(set(ipv6_list))
 
         shared_state.ip_address = device_ips
-        shared_state.ipv4_ips = ipv4_list        
-        shared_state.ipv6_ips = ipv6_list        
-    except Exception as e:
+        shared_state.ipv4_ips = ipv4_list
+        shared_state.ipv6_ips = ipv6_list
+    except (psutil.Error, OSError) as e:
         print(f"Error getting device IPs: {e}")
 
 
@@ -64,41 +66,41 @@ def get_network_interfaces():
         interfaces = []
         output = proc.stdout.strip()
         lines = output.split('\n')
-        
+
         for line in lines:
             match = re.match(r'^(\d+)\.\s+(.+?)(?:\s+\((.+?)\))?$', line)
             if match:
                 interface_num = match.group(1)
                 full_interface_path = match.group(2).strip()
                 descriptive_name = match.group(3).strip() if match.group(3) else full_interface_path
-                
+
                 interfaces.append({
                     "id": interface_num,
                     "name": descriptive_name,
                     "full_path": full_interface_path
                 })
-        
+
         print(f"Found {len(interfaces)} network interfaces")
         return interfaces
-    except Exception as e:
+    except (FileNotFoundError, subprocess.CalledProcessError, OSError) as e:
         print(f"Error getting network interfaces: {e}")
         return [{"id": "1", "name": "Default Interface"}]
-    
+
 
 
 async def start_tshark(interface = "1"):
     """Start tshark with the specified interface (number or name)"""
-    
+
     if shared_state.tshark_proc is not None:
         return False, "Tshark already running"
-    
+
     try:
         print(f"Starting tshark on interface: {interface}")
-        
+
         tshark_cmd = [
             "tshark",
             "-i", str(interface),
-            "-T", "fields", 
+            "-T", "fields",
             "-l",
             "-e", "frame.number",
             "-e", "frame.time_epoch",
@@ -121,7 +123,7 @@ async def start_tshark(interface = "1"):
             "-e", "rtp.timestamp",
             "-e", "rtp.p_type",
             "-e", "ipv6.nxt",
-            "-e", "tcp.len",        
+            "-e", "tcp.len",
             "-e", "udp.length",
             "-e", "tcp.srcport",
             "-e", "tcp.dstport",
@@ -137,17 +139,17 @@ async def start_tshark(interface = "1"):
             "-E", "header=n",
             "-E", "quote=n"
         ]
-        
+
         # Create async subprocess
         shared_state.tshark_proc = await asyncio.create_subprocess_exec(
             *tshark_cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        
+
         # Wait a bit and check if process started
         await asyncio.sleep(0.2)
-                
+
         if shared_state.tshark_proc.returncode is not None:
             try:
                 stderr_output = await asyncio.wait_for(
@@ -156,33 +158,34 @@ async def start_tshark(interface = "1"):
                 )
                 error_msg = stderr_output.decode()
                 print(f"Tshark failed to start: {error_msg}")
-            except Exception as e:
+            except (asyncio.TimeoutError, asyncio.CancelledError, UnicodeDecodeError) as e:
                 error_msg = e
             shared_state.tshark_proc = None
             return False, f"Failed to start tshark on interface {interface}: {error_msg}"
-        
+
         shared_state.capture_active = True
         print(f"Tshark started successfully on interface {interface}")
         return True, f"Tshark started on interface {interface}"
-        
+
     except FileNotFoundError:
         print("Tshark not found. Please install Wireshark/tshark.")
         return False, "Tshark not found. Please install Wireshark."
-    except Exception as e:
+    except (OSError, RuntimeError) as e:
         print(f"Error starting tshark: {e}")
         if shared_state.tshark_proc:
             shared_state.tshark_proc = None
         return False, f"Error starting tshark: {e}"
 
 
-def resetSharedState():
+def reset_shared_state():
+    """Reset all shared capture-related state variables."""
     shared_state.tshark_proc = None
     shared_state.capture_active = False
     shared_state.session_start_time = None
 
     shared_state.streams = {}
     shared_state.all_packets_history = []
-    
+
     shared_state.tcp_expected_packets_total = 0
     shared_state.tcp_lost_packets_total = 0
     shared_state.rtp_expected_packets_total = 0
@@ -200,11 +203,11 @@ def resetSharedState():
         "IGMP": 0,
         "Others": 0
     }
-    
+
     shared_state.metrics_state.update({
         "inbound_throughput": 0.0,
         "outbound_throughput": 0.0,
-        "inbound_goodput": 0.0,      
+        "inbound_goodput": 0.0,
         "outbound_goodput": 0.0,
         "status": "stopped",
         "last_update": None,
@@ -357,7 +360,7 @@ def resetSharedState():
             'outbound_goodput_avg': 0.0,
             'cumulative_duration': 0
         },
-        
+
         'tcp': {
             'inbound_throughput_peak': 0.0,
             'inbound_throughput_sum': 0.0,
@@ -371,7 +374,7 @@ def resetSharedState():
             'latency_count': 0,
             'cumulative_duration': 0
         },
-        
+
         'udp': {
             'inbound_throughput_peak': 0.0,
             'inbound_throughput_sum': 0.0,
@@ -381,7 +384,7 @@ def resetSharedState():
             'outbound_throughput_avg': 0.0,
             'cumulative_duration': 0
         },
-        
+
         'rtp': {
             'inbound_throughput_peak': 0.0,
             'inbound_throughput_sum': 0.0,
@@ -395,7 +398,7 @@ def resetSharedState():
             'jitter_count': 0,
             'cumulative_duration': 0
         },
-        
+
         'quic': {
             'inbound_throughput_peak': 0.0,
             'inbound_throughput_sum': 0.0,
@@ -405,7 +408,7 @@ def resetSharedState():
             'outbound_throughput_avg': 0.0,
             'cumulative_duration': 0
         },
-        
+
         'dns': {
             'inbound_throughput_peak': 0.0,
             'inbound_throughput_sum': 0.0,
@@ -415,7 +418,7 @@ def resetSharedState():
             'outbound_throughput_avg': 0.0,
             'cumulative_duration': 0
         },
-        
+
         'igmp': {
             'inbound_throughput_peak': 0.0,
             'inbound_throughput_sum': 0.0,
@@ -425,7 +428,7 @@ def resetSharedState():
             'outbound_throughput_avg': 0.0,
             'cumulative_duration': 0
         },
-        
+
         'ipv4': {
             'inbound_throughput_peak': 0.0,
             'inbound_throughput_sum': 0.0,
@@ -435,7 +438,7 @@ def resetSharedState():
             'outbound_throughput_avg': 0.0,
             'cumulative_duration': 0
         },
-        
+
         'ipv6': {
             'inbound_throughput_peak': 0.0,
             'inbound_throughput_sum': 0.0,
@@ -469,10 +472,10 @@ async def stop_tshark():
                 shared_state.tshark_proc.kill()
                 await shared_state.tshark_proc.wait()
                 print("Tshark killed")
-            except Exception as e:
+            except (ProcessLookupError, ChildProcessError, OSError) as e:
                 print(f"Exception: {e}")
 
-        except Exception as e:
+        except (asyncio.CancelledError, OSError, RuntimeError) as e:
             print(f"Error stopping tshark: {e}")
             return False, "Error stopping Tshark" # Return False on error
         finally:
@@ -480,14 +483,15 @@ async def stop_tshark():
             shared_state.tshark_proc = None
 
         return True, "Tshark stopped successfully"
-    else:
-        print("Tshark was not running")
-        return False, "Tshark was not running"
-    
+
+    print("Tshark was not running")
+    return False, "Tshark was not running"
+
 
 # Parse packet once and store only needed fields for display
 # T.C: O(1) for 1 packet
 def parse_and_store_packet(parts):
+    """Parse the packet"""
     try:
         frame_number = parts[0] or "N/A"
         timestamp = parts[1] or "N/A"
@@ -504,7 +508,7 @@ def parse_and_store_packet(parts):
             try:
                 ts_float = float(timestamp)
                 formatted_time = datetime.fromtimestamp(ts_float).strftime("%H:%M:%S.%f")[:-3]
-            except:
+            except (ValueError, TypeError, OverflowError):
                 formatted_time = timestamp
         else:
             formatted_time = "N/A"
@@ -519,7 +523,7 @@ def parse_and_store_packet(parts):
             "info": info
         }
         return packet_data
-    except Exception as e:
+    except (IndexError, TypeError, ValueError) as _e:
         # Return minimal data on error
         return {
             "no": "N/A",
@@ -539,17 +543,17 @@ async def capture_packets(duration):
 
     shared_state.streams = {}
     shared_state.all_packets_history = []
-    
+
     start = time.time()
     new_packets_count = 0
-    
+
     while time.time() - start < duration and shared_state.capture_active:
         try:
             # Check if process is still alive
             if shared_state.tshark_proc.returncode is not None:
                 print("Tshark process terminated unexpectedly")
                 break
-            
+
             # It won't block the event loop, so frontend commands still work
             try:
                 line_bytes = await asyncio.wait_for(
@@ -559,13 +563,13 @@ async def capture_packets(duration):
             except asyncio.TimeoutError:
                 # Normal timeout - no data within 1 second, just continue
                 continue
-            except Exception as e:
+            except (asyncio.CancelledError, OSError) as e:
                 print(f"Exception: {e}")
                 continue
-            
+
             if not line_bytes:
                 break
-            
+
             line = line_bytes.decode('utf-8', errors='ignore').strip()
             if not line:
                 continue
@@ -576,26 +580,26 @@ async def capture_packets(duration):
                 # Extract fields by their new index
                 src_ip = parts[2] or parts[16]
                 dst_ip = parts[3] or parts[17]
-                protocol = parts[5]
+                _protocol = parts[5]
 
                 tcp_srcport = parts[23]
                 tcp_dstport = parts[24]
                 udp_srcport = parts[25]
                 udp_dstport = parts[26]
 
-                src_port = tcp_srcport or udp_srcport
+                _src_port = tcp_srcport or udp_srcport
                 dst_port = tcp_dstport or udp_dstport
 
                 dns_query = parts[27]
                 dns_responses = (parts[28] or "") + "," + (parts[29] or "")
-                
+
                 # Get the new SNI field
                 sni_hostname = parts[30] if parts[30] else None
                 quic_sni = parts[31] if parts[31] else None
 
                 # Detect the application using the new, prioritized logic
                 app_info = app_detector.detect_application(
-                    src_ip, dst_ip, src_port, dst_port, protocol, 
+                    src_ip, dst_ip, dst_port,
                     dns_query, dns_responses, sni_hostname, quic_sni
                 )
 
@@ -604,20 +608,20 @@ async def capture_packets(duration):
                 if server_ip:
                     if server_ip not in shared_state.ip_stats:
                         shared_state.ip_stats[server_ip] = {
-                            "packets": 0, 
+                            "packets": 0,
                             "app_info": app_info
                         }
-                    
-                    shared_state.ip_stats[server_ip]["packets"] += 1
-                    
-                    if app_info['app'] != 'Unknown':
-                         if shared_state.ip_stats[server_ip]["app_info"]['app'] == 'Unknown' or \
-                            shared_state.ip_stats[server_ip]["app_info"]['category'] == 'Web':
-                           shared_state.ip_stats[server_ip]["app_info"] = app_info
 
-            except Exception as e:
+                    shared_state.ip_stats[server_ip]["packets"] += 1
+
+                    if app_info['app'] != 'Unknown':
+                        if shared_state.ip_stats[server_ip]["app_info"]['app'] == 'Unknown' or \
+                            shared_state.ip_stats[server_ip]["app_info"]['category'] == 'Web':
+                            shared_state.ip_stats[server_ip]["app_info"] = app_info
+
+            except (IndexError, TypeError, ValueError, KeyError) as e:
                 print(f"Exception: {e}")
-           
+
             formatted_packet = parse_and_store_packet(parts)
             if formatted_packet:
                 shared_state.all_packets_history.append(formatted_packet)
@@ -633,7 +637,11 @@ async def capture_packets(duration):
             proto_name = protocol_map.get(ip_proto, None)
             proto_temp = protocol_map.get(proto_temp, None)
 
-            if (proto_name == "tcp" or proto == "tcp" or proto_temp == "tcp") and tcp_stream != "N/A":
+            if ((proto_name == "tcp" or
+                proto == "tcp" or
+                proto_temp == "tcp") and
+                tcp_stream != "N/A"
+            ):
                 key = ("tcp", tcp_stream)
             elif proto_name == "udp" and udp_stream != "N/A":
                 key = ("udp", udp_stream)
@@ -646,7 +654,7 @@ async def capture_packets(duration):
                 shared_state.streams[key] = []
             shared_state.streams[key].append(parts)
 
-        except Exception as e:
+        except (asyncio.CancelledError, OSError, RuntimeError) as e:
             print(f"Error reading packet: {e}")
             break
 

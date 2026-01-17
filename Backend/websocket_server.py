@@ -4,8 +4,10 @@ Auto-stops capture when all clients disconnect (like on refresh).
 """
 import json
 import asyncio
-import websockets
 from datetime import datetime
+
+import websockets
+
 import capture_manager
 import metrics_calculator
 import shared_state
@@ -17,11 +19,11 @@ async def data_collection_loop():
     """Continuously collect data and send updates to clients - ASYNC VERSION"""
     while True:
         await asyncio.sleep(0.1)
-        
+
         # This flag is now set to False by stop_tshark()
         if not capture_manager.is_capture_active():
             continue
-        
+
         # Skip if no clients
         if not shared_state.connected_clients:
             await asyncio.sleep(0.5)
@@ -62,7 +64,7 @@ async def data_collection_loop():
                 "top_talkers": shared_state.top_talkers_top7,
                 "new_geolocations": shared_state.new_geolocations
             }
-            
+
             try:
                 await client.send(json.dumps(data_to_send))
             except websockets.exceptions.ConnectionClosed:
@@ -70,7 +72,7 @@ async def data_collection_loop():
 
         # Clear new geolocations after sending
         shared_state.new_geolocations = []
-        
+
         if disconnected_clients:
             for client in disconnected_clients:
                 if client in shared_state.connected_clients:
@@ -84,33 +86,39 @@ async def periodic_summary_loop():
     """
     while True:
         await asyncio.sleep(10)  # Check every 10 seconds
-        
+
         # Only generate if capture is active and clients are connected
         if not capture_manager.is_capture_active() or not shared_state.connected_clients:
             continue
-        
+
         # Check if session has started
-        if not hasattr(shared_state, 'session_start_time') or shared_state.session_start_time is None:
+        if (
+            not hasattr(shared_state, 'session_start_time')
+            or shared_state.session_start_time is None
+        ):
             continue
-        
+
         # Calculate time since session start
         session_duration = (datetime.now() - shared_state.session_start_time).total_seconds()
-        
+
         # Initialize last_periodic_summary_time if not set
         if shared_state.last_periodic_summary_time is None:
             shared_state.last_periodic_summary_time = shared_state.session_start_time
-        
+
         # Calculate time since last periodic summary
-        time_since_last_summary = (datetime.now() - shared_state.last_periodic_summary_time).total_seconds()
-        
-        # Generate summary if 60 seconds have passed and session has been running for at least 60 seconds
+        time_since_last_summary = (
+            datetime.now() - shared_state.last_periodic_summary_time
+        ).total_seconds()
+
+        # Generate summary if 60 seconds have passed and session has
+        # been running for at least 60 seconds
         if time_since_last_summary >= 60 and session_duration >= 60:
             print(f"Generating periodic summary at {session_duration:.0f}s...")
-            
+
             try:
                 # Generate the periodic summary
                 summary = await llm_summarizer.generate_periodic_summary()
-                
+
                 # Send to all connected clients
                 disconnected_clients = set()
                 for client in list(shared_state.connected_clients.keys()):
@@ -118,23 +126,29 @@ async def periodic_summary_loop():
                         "type": "periodic_summary",
                         "summary": summary
                     }
-                    
+
                     try:
                         await client.send(json.dumps(data_to_send))
                     except websockets.exceptions.ConnectionClosed:
                         disconnected_clients.add(client)
-                
+
                 # Clean up disconnected clients
                 if disconnected_clients:
                     for client in disconnected_clients:
                         if client in shared_state.connected_clients:
                             del shared_state.connected_clients[client]
-                
+
                 # Update the last summary time
                 shared_state.last_periodic_summary_time = datetime.now()
                 print(f"Periodic summary sent to {len(shared_state.connected_clients)} clients")
-                
-            except Exception as e:
+
+            except (
+                TimeoutError,
+                RuntimeError,
+                ValueError,
+                TypeError,
+                websockets.exceptions.ConnectionClosed,
+            ) as e:
                 print(f"Error generating periodic summary: {e}")
 
 
@@ -144,13 +158,13 @@ async def handle_stop_capture_task(websocket, data):
     Handles the entire stop_capture flow as a background task.
     This frees the main websocket loop to receive new commands.
     """
-    
+
     # 0. Check if capture is active. If not, it's already stopping.
     if not shared_state.capture_active:
         return # Silently exit, another stop command is already in progress
 
     # 1. Get duration
-    final_duration = data.get("duration") 
+    final_duration = data.get("duration")
     if final_duration is not None:
         shared_state.session_duration_final = int(final_duration)
         print(f"Received accurate duration from frontend: {shared_state.session_duration_final}s")
@@ -162,11 +176,11 @@ async def handle_stop_capture_task(websocket, data):
 
     # 3. Give the data_collection_loop a grace period (0.5s) to run its
     #    FINAL metrics calculation and then stop (since capture_active is False).
-    await asyncio.sleep(0.5) 
+    await asyncio.sleep(0.5)
 
     # 4. Check if we should summarize
-    should_summarize = success 
-    
+    should_summarize = success
+
     summary = None
     if should_summarize:
         print("Generating AI summary...")
@@ -174,11 +188,16 @@ async def handle_stop_capture_task(websocket, data):
         try:
             summary = await llm_summarizer.generate_summary()
             print("Summary generated.")
-        except Exception as e:
+        except (
+            TimeoutError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+        ) as e:
             error_msg = f"Error during summary: {e}"
             print(f"Exception: {error_msg}")
             # Send an error summary so the frontend knows it failed
-            summary = {"summary": error_msg, "breakdown": []} 
+            summary = {"summary": error_msg, "breakdown": []}
         finally:
             shared_state.is_generating_summary = False # UNSET FLAG
     else:
@@ -187,22 +206,26 @@ async def handle_stop_capture_task(websocket, data):
 
     # 5. Build the final response with the summary data
     response = {
-        "type": "command_response", 
+        "type": "command_response",
         "command": "stop_capture", # This is the FINAL response
-        "success": success, 
+        "success": success,
         "message": msg
     }
     if summary:
         response["summary"] = summary
-    
+
     # 6. Send the final response to the client
     try:
         await websocket.send(json.dumps(response))
-    except Exception as e:
+    except (
+        websockets.exceptions.ConnectionClosed,
+        TypeError,
+        ValueError,
+    ) as e:
         print(f"Failed to send summary to client: {e}")
-    
+
     # 7. NOW, reset the state for the next session
-    capture_manager.resetSharedState()
+    capture_manager.reset_shared_state()
     print("State reset for next session.")
 
 async def handle_command(command, data):
@@ -210,16 +233,16 @@ async def handle_command(command, data):
     if command == "get_interfaces":
         interfaces = capture_manager.get_network_interfaces()
         return {"type": "interfaces_response", "interfaces": interfaces}
-    
-    elif command == "start_capture":
-        
+
+    if command == "start_capture":
+
         # This checks the loop isn't blocked by stop_capture
         if shared_state.is_generating_summary:
             print("Start capture rejected: Summary generation in progress.")
             return {
-                "type": "command_response", 
-                "command": "start_capture", 
-                "success": False, 
+                "type": "command_response",
+                "command": "start_capture",
+                "success": False,
                 "message": "Please wait, the previous session's summary is still being generated."
             }
 
@@ -233,26 +256,30 @@ async def handle_command(command, data):
             success, msg = await capture_manager.start_tshark(interface)
             if success:
                 metrics_calculator.update_metrics_status("running")
-        return {"type": "command_response", "command": "start_capture", "success": success, "message": msg}
+            return {
+                "type": "command_response",
+                "command": "start_capture",
+                "success": success,
+                "message": msg,
+            }
 
-    elif command == "get_status":
+    if command == "get_status":
         return {"type": "status_response", "metrics": shared_state.metrics_state}
-    
-    else:
-        return {"type": "error", "message": f"Unknown command: {command}"}
+
+    return {"type": "error", "message": f"Unknown command: {command}"}
 
 async def websocket_handler(websocket):
     """Handle a single WebSocket client connection."""
     client_id = id(websocket)
     try:
-        # WAIT if system is resetting 
+        # WAIT if system is resetting
         while shared_state.is_resetting:
             print(f"Client {client_id} waiting - system is resetting...")
             await asyncio.sleep(0.1)
 
         shared_state.connected_clients[websocket] = {"connected_at": datetime.now().isoformat()}
         print(f"Client {client_id} connected. Total clients: {len(shared_state.connected_clients)}")
-        
+
         interfaces = capture_manager.get_network_interfaces()
         initial_data = {
             "type": "initial_state",
@@ -278,70 +305,76 @@ async def websocket_handler(websocket):
         async for message in websocket:
             data = json.loads(message)
             command = data.get("command")
-            
+
             if command == "stop_capture":
                 # 1. Detach the slow logic as a background task
                 asyncio.create_task(handle_stop_capture_task(websocket, data))
-                
+
                 # 2. Send an *immediate* "Tshark stopped" response
                 #    This is for the 1.5s popup.
                 await websocket.send(json.dumps({
-                    "type": "command_response", 
+                    "type": "command_response",
                     "command": "stop_capture_ack",
-                    "success": True, 
+                    "success": True,
                     "message": "Tshark stopped successfully"
                 }))
-                
+
             elif command:
                 # All other commands are fast and can be awaited
                 response = await handle_command(command, data)
                 if response:
                     await websocket.send(json.dumps(response))
 
-    except Exception as e:
+    except (
+        websockets.exceptions.ConnectionClosed,
+        json.JSONDecodeError,
+        TypeError,
+        ValueError,
+        RuntimeError,
+    ) as e:
         print(f"Exception: {e}")
-        
+
     finally:
         if websocket in shared_state.connected_clients:
             del shared_state.connected_clients[websocket]
-        
+
         remaining = len(shared_state.connected_clients)
         print(f"Client {client_id} session ended. Total clients: {remaining}")
-        
+
         if remaining == 0 and capture_manager.is_capture_active():
             print("Last client disconnected, stopping capture...")
-            
-            # SET RESETTING FLAG 
+
+            # SET RESETTING FLAG
             shared_state.is_resetting = True
-            
+
             # Call the *modified* stop_tshark (which no longer resets)
             await capture_manager.stop_tshark()
             metrics_calculator.update_metrics_status("stopped")
-            
-            # Wait for complete reset 
+
+            # Wait for complete reset
             await asyncio.sleep(0.3)
-            
+
             # reset the state
-            capture_manager.resetSharedState()
-            
-            # CLEAR RESETTING FLAG 
+            capture_manager.reset_shared_state()
+
+            # CLEAR RESETTING FLAG
             shared_state.is_resetting = False
-            
+
             print("RESET COMPLETE - Ready for new connections")
 
 async def start_websocket_server():
     """Start the WebSocket server and the data collection loop."""
     print("Starting WebSocket server on ws://localhost:8765")
-    
+
     asyncio.create_task(data_collection_loop())
     asyncio.create_task(geolocation_handler.geolocation_loop())
-    asyncio.create_task(periodic_summary_loop()) 
-    
+    asyncio.create_task(periodic_summary_loop())
+
     server = await websockets.serve(
-        websocket_handler, 
-        "localhost", 
+        websocket_handler,
+        "localhost",
         8765,
-        ping_interval=None,        
-        ping_timeout=None,         
+        ping_interval=None,
+        ping_timeout=None,
     )
     await server.wait_closed()

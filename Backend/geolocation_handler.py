@@ -1,20 +1,27 @@
-import aiohttp
+"""
+Geolocation handler for resolving public IP addresses to
+geographic location and reverse DNS information.
+"""
+
 import asyncio
-from ipaddress import ip_address
-import shared_state
-import time
 import socket
+import time
+from ipaddress import ip_address
+
+import aiohttp
+
+import shared_state
 from static_geolocation_db import STATIC_GEOLOCATION_DB
 
 # Rate limiting
-last_api_call_time = 0
-min_time_between_calls = 0.023  # ~45 requests per minute (API limit)
+LAST_API_CALL_TIME = 0
+MIN_TIME_BETWEEN_CALLS = 0.023  # ~45 requests per minute (API limit)
 
 def is_public_ip(ip_str):
     """Check if an IP address is public (not private/reserved)"""
     try:
         ip_obj = ip_address(ip_str)
-        return not (ip_obj.is_private or ip_obj.is_loopback or 
+        return not (ip_obj.is_private or ip_obj.is_loopback or
                    ip_obj.is_link_local or ip_obj.is_multicast or
                    ip_obj.is_reserved)
     except ValueError:
@@ -22,7 +29,7 @@ def is_public_ip(ip_str):
 
 async def fetch_geolocation(session, ip):
     """Fetch geolocation and rDNS data for a single IP"""
-    global last_api_call_time
+    global LAST_API_CALL_TIME
     hostname = None
 
     # Get rDNS hostname
@@ -33,8 +40,8 @@ async def fetch_geolocation(session, ip):
         hostname = hostname_tuple[0]
     except (asyncio.TimeoutError, socket.herror):
         hostname = None
-    except Exception as e:
-        print(f"Error during rDNS lookup for {ip}: {e}")
+    except OSError as exc:
+        print(f"Error during rDNS lookup for {ip}: {exc}")
         hostname = None
 
     # CHECK STATIC DATABASE FIRST and if not found here
@@ -50,16 +57,16 @@ async def fetch_geolocation(session, ip):
             "hostname": hostname,
         }
         return geo_data
-    
+
     try:
         current_time = time.time()
-        time_since_last = current_time - last_api_call_time
-        if time_since_last < min_time_between_calls:
-            await asyncio.sleep(min_time_between_calls - time_since_last)
-        
+        time_since_last = current_time - LAST_API_CALL_TIME
+        if time_since_last < MIN_TIME_BETWEEN_CALLS:
+            await asyncio.sleep(MIN_TIME_BETWEEN_CALLS - time_since_last)
+
         url = f"http://ip-api.com/json/{ip}?fields=status,lat,lon,city,country,query"
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
-            last_api_call_time = time.time()
+            LAST_API_CALL_TIME = time.time()
             if response.status == 200:
                 data = await response.json()
                 if data.get("status") == "success":
@@ -72,35 +79,35 @@ async def fetch_geolocation(session, ip):
                         "hostname": hostname
                     }
                     return geo_data
-    except Exception as e:
-        print(f"Error fetching geolocation for {ip}: {e}")
-    
+    except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
+        print(f"Geolocation fetch failed for {ip}: {exc}")
+
     return None
 
 async def process_geolocation_batch(ips_to_query):
     """Process a batch of IPs for geolocation lookup"""
     if not ips_to_query:
         return
-    
+
     async with aiohttp.ClientSession() as session:
         # We process sequentially to respect rate limits
         for ip in ips_to_query:
             result = await fetch_geolocation(session, ip)
-            
+
             if result and isinstance(result, dict):
                 # Add passively captured DNS name if it exists
                 if ip in shared_state.ip_to_dns:
                     result["dns_name"] = shared_state.ip_to_dns[ip]
-                
+
                 # Add application info if it exists
                 if ip in shared_state.ip_stats:
                     stats = shared_state.ip_stats[ip]
                     result["app_info"] = stats.get("app_info")
-                
+
                 # Now, append the fully formed result
                 shared_state.new_geolocations.append(result)
 
-def extract_ips_from_packets(packets_data):
+def extract_ips_from_packets(_packets_data):
     """Extract unique public IPs from raw packet data"""
     public_ips = set()
     all_raw_packets = []
@@ -114,7 +121,7 @@ def extract_ips_from_packets(packets_data):
             destination = parts[3] or parts[17]
             for ip in [source, destination]:
                 if ip and ip != "N/A" and is_public_ip(ip):
-                    if (ip not in shared_state.ip_address and 
+                    if (ip not in shared_state.ip_address and
                         ip not in shared_state.queried_public_ips):
                         public_ips.add(ip)
         except (IndexError, TypeError):
